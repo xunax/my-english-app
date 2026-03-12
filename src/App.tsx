@@ -77,6 +77,21 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [qaMessages, grammarMessages]);
+  useEffect(() => {
+    const loadSavedWords = async () => {
+      try {
+        const response = await fetch('/api/get-words');
+        if (response.ok) {
+          const data = await response.json();
+           setVocabularyList(data); 
+        }
+      } catch (error) {
+        console.error("從資料庫拿單字失敗了：", error);
+      }
+    };
+  
+    loadSavedWords();
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
