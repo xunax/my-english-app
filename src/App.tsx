@@ -37,6 +37,17 @@ interface ChatMessage {
   timestamp: number;
 }
 
+// 把這張「單字身分證」補上去，Vercel 就不會報錯了！
+interface WordAnalysis {
+  word: string;
+  pronunciation: string;
+  meaning: string;
+  partOfSpeech: string; // ✨ 對應資料庫的 part_of_speech
+  exampleEn: string;    // ✨ 對應資料庫的 example_en
+  exampleTw: string;    // ✨ 對應資料庫的 example_tw
+  forms?: string;
+}
+
 function QuickActionBtn({ onClick, label }: { onClick: () => void, label: string }) {
   return (
     <button 
