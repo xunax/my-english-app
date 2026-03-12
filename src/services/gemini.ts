@@ -21,7 +21,7 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
   }));
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     contents: [
       {
         parts: [
@@ -103,7 +103,7 @@ export interface QuizQuestion {
 
 export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     contents: [
       {
         parts: [
@@ -157,7 +157,7 @@ export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
 
 export async function chatWithAI(message: string, history: { role: "user" | "model"; text: string }[]) {
   const chat = ai.chats.create({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     config: {
       systemInstruction: `你是一位「極速英文家教」。最高原則：精簡、快速、零廢話。
       絕對禁止輸出任何客套話、前言或結語。直接輸出核心資訊。
