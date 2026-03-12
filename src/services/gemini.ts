@@ -68,7 +68,24 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
     const jsonStr = jsonMatch ? jsonMatch[1] : text;
     const result = JSON.parse(jsonStr.trim());
-    return result.vocabulary_list || [];
+    const words = result.vocabulary_list || [];
+
+    // --- 呼叫警衛室存單字 (開始) ---
+    for (const item of words) {
+      try {
+        // 把單字打包，發送 POST 請求給 Vercel 後端 API
+        await fetch('/api/save-word', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+      } catch (dbError) {
+        console.error("單字存檔失敗:", dbError);
+      }
+    }
+    // --- 呼叫警衛室存單字 (結束) ---
+
+    return words;
   } catch (e) {
     console.error("Failed to parse JSON from Gemini", e, text);
     return [];
