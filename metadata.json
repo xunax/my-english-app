@@ -1,0 +1,7 @@
+{
+  "name": "AI 英文學習助手 (AI English Tutor)",
+  "description": "專為台灣使用者打造的全能 AI 英文學習助手，提供影像辨識單字、文法教學與 AI 問答功能。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
