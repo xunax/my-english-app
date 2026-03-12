@@ -712,78 +712,51 @@ export default function App() {
     );
   };
 
+
   const renderHistoryTab = () => (
-    <div className="flex flex-col h-full">
-      <div className="p-6 flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-stone-800 mb-2">學習足跡</h2>
-          <p className="text-stone-500 text-sm">回顧您曾經辨識過的單字</p>
+    <div className="flex-1 overflow-y-auto px-6 pb-20">
+      {history.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 opacity-30">
+          <History size={48} className="mb-2" />
+          <p>尚無歷史紀錄</p>
         </div>
-        {history.length > 0 && (
-          <button 
-            onClick={() => handleStartQuiz()}
-            className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-full shadow-md shadow-emerald-100 flex items-center gap-2"
-          >
-            <CheckCircle2 size={14} />
-            單字測驗
-          </button>
-        )}
-      </div>
-      
-      <div className="flex-1 overflow-y-auto px-6 pb-20">
-        {history.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 opacity-30">
-            <History size={48} className="mb-2" />
-            <p>尚無歷史紀錄</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3">
-            {history.map((item, idx) => (
-              <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-stone-100 flex justify-between items-center group">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-stone-800">{item.word}</span>
-                    {/* 修正：配合 API 改為 partOfSpeech */}
-                    <span className="text-[10px] text-stone-400 uppercase">{item.partOfSpeech}</span>
-                  </div>
-                  <p className="text-xs text-stone-500 mt-0.5">{item.meaning}</p>
-            
-                  {/* ✨ 只有資料庫有例句時才會顯示 */}
-                  {item.exampleEn && (
-                    <div className="mt-2 pt-2 border-t border-stone-50">
-                      <p className="text-xs text-stone-600 italic leading-relaxed">
-                        "{item.exampleEn}"
-                      </p>
-                      <p className="text-[10px] text-stone-400 mt-0.5">
-                        {item.exampleTw}
-                      </p>
-                    </div>
-                  )}
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {history.map((item, idx) => (
+            <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-stone-100 flex justify-between items-center group">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-stone-800">{item.word}</span>
+                  <span className="text-[10px] text-stone-400 uppercase">{item.partOfSpeech}</span>
                 </div>
-            
-                {/* 喇叭按鈕要放在 flex-1 的外面，它才會乖乖待在最右邊 */}
-                <button
-                  onClick={() => speak(item.word)}
-                  className="p-2 text-stone-300 hover:text-emerald-500 transition-colors"
-                >
-                  <Volume2 size={18} />
-                </button>
+                <p className="text-xs text-stone-500 mt-0.5">{item.meaning}</p>
+
+                {/* ✨ 例句顯示區塊 */}
+                {item.exampleEn && (
+                  <div className="mt-2 pt-2 border-t border-stone-50">
+                    <p className="text-xs text-stone-600 italic leading-relaxed">
+                      "{item.exampleEn}"
+                    </p>
+                    <p className="text-[10px] text-stone-400 mt-0.5">
+                      {item.exampleTw}
+                    </p>
+                  </div>
+                )}
               </div>
-            ))}
-                <button 
-                  onClick={() => speak(item.word)}
-                  className="p-2 text-stone-300 hover:text-emerald-500 transition-colors"
-                >
-                  <Volume2 size={18} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <button
+                onClick={() => speak(item.word)}
+                className="p-2 text-stone-300 hover:text-emerald-500 transition-colors"
+              >
+                <Volume2 size={18} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-
+  
   return (
     <div className="flex flex-col h-screen bg-stone-50 max-w-md mx-auto relative overflow-hidden shadow-2xl">
       {/* Header */}
