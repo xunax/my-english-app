@@ -83,7 +83,7 @@ export default function App() {
         const response = await fetch('/api/get-words');
         if (response.ok) {
           const data = await response.json();
-           setVocabularyList(data); 
+           setHistory(data); 
         }
       } catch (error) {
         console.error("從資料庫拿單字失敗了：", error);
