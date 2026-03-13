@@ -272,14 +272,7 @@ export default function App() {
     }
 
     if (currentQuiz.length === 0) {
-      const presets = [
-        "現在完成式",
-        "過去簡單式",
-        "被動語態",
-        "關係代名詞",
-        "假設語氣"
-      ];
-
+      const presets = ["現在完成式", "過去簡單式", "被動語態", "關係代名詞", "假設語氣"];
       return (
         <div className="flex flex-col h-full p-6 overflow-y-auto">
           <div className="flex flex-col items-center text-center space-y-4 mb-8">
@@ -292,7 +285,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 pb-20">
             <section>
               <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">單字複習</h4>
               <button 
@@ -365,18 +358,21 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-6">
+        {/* 捲動區域：確保高度固定並可捲動 */}
+        <div className="flex-1 overflow-y-auto space-y-6 pb-10">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
             <div className="flex items-center gap-2 mb-4">
               <span className="px-2 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-bold rounded uppercase tracking-wider">
-                {q.type === 'multiple_choice' ? '選擇題' : q.type === 'fill_in_the_blank' ? '填空題' : '除錯題'}
+                {/* 使用 includes 解決橫線/底線命名不一致的問題 */}
+                {q.type?.includes('multiple') ? '選擇題' : q.type?.includes('fill') ? '填空題' : '除錯題'}
               </span>
             </div>
             <h3 className="text-lg font-bold text-stone-800 leading-relaxed">{q.question}</h3>
           </div>
 
           <div className="space-y-3">
-            {q.type === 'multiple_choice' && q.options?.map((opt, i) => (
+            {/* 選擇題邏輯 */}
+            {q.type?.includes('multiple') && q.options?.map((opt, i) => (
               <button
                 key={i}
                 onClick={() => handleAnswer(opt)}
@@ -398,10 +394,12 @@ export default function App() {
               </button>
             ))}
 
-            {(q.type === 'fill_in_the_blank' || q.type === 'error_correction') && !showExplanation && (
+            {/* 填空題與除錯題邏輯 */}
+            {(q.type?.includes('fill') || q.type?.includes('error')) && !showExplanation && (
               <div className="space-y-4">
                 <input 
                   type="text"
+                  autoFocus
                   placeholder="請輸入答案..."
                   className="w-full p-4 rounded-xl border border-stone-100 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20"
                   onKeyDown={(e) => {
@@ -410,17 +408,18 @@ export default function App() {
                 />
                 <button 
                   onClick={() => {
-                    const input = document.querySelector('input') as HTMLInputElement;
+                    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
                     handleAnswer(input.value);
                   }}
-                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold"
+                  className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold shadow-md active:scale-95 transition-all"
                 >
                   提交答案
                 </button>
               </div>
             )}
 
-            {showExplanation && (q.type === 'fill_in_the_blank' || q.type === 'error_correction') && (
+            {/* 填空題回答後的顯示 */}
+            {showExplanation && (q.type?.includes('fill') || q.type?.includes('error')) && (
               <div className={cn(
                 "p-4 rounded-xl border flex items-center justify-between",
                 isCorrect ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-red-50 border-red-500 text-red-700"
@@ -434,6 +433,7 @@ export default function App() {
             )}
           </div>
 
+          {/* 解析區塊 */}
           <AnimatePresence>
             {showExplanation && (
               <motion.div
@@ -456,7 +456,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={nextQuestion}
-                  className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg"
                 >
                   {quizIndex < currentQuiz.length - 1 ? '下一題' : '查看結果'}
                   <ChevronRight size={18} />
