@@ -284,7 +284,6 @@ export default function App() {
               <p className="text-stone-500 text-sm mt-1">選擇一個主題或輸入您想練習的文法組合</p>
             </div>
           </div>
-
           <div className="space-y-6 pb-20">
             <section>
               <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">單字複習</h4>
@@ -296,7 +295,6 @@ export default function App() {
                 複習辨識過的單字
               </button>
             </section>
-
             <section>
               <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">熱門文法主題</h4>
               <div className="grid grid-cols-2 gap-2">
@@ -311,27 +309,6 @@ export default function App() {
                 ))}
               </div>
             </section>
-
-            <section>
-              <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">自訂練習主題</h4>
-              <div className="relative flex items-center">
-                <input 
-                  type="text"
-                  value={customGrammarTopic}
-                  onChange={(e) => setCustomGrammarTopic(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleStartQuiz(`請出 3-5 題「${customGrammarTopic}」考我`)}
-                  placeholder="例如：現在完成式 + 過去簡單式"
-                  className="w-full bg-white border border-stone-100 rounded-xl py-3.5 pl-4 pr-12 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                />
-                <button 
-                  onClick={() => handleStartQuiz(`請出 3-5 題「${customGrammarTopic}」考我`)}
-                  disabled={!customGrammarTopic.trim()}
-                  className="absolute right-2 p-2 bg-stone-900 text-white rounded-lg disabled:opacity-30 transition-all"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
-            </section>
           </div>
         </div>
       );
@@ -339,6 +316,7 @@ export default function App() {
 
     const q = currentQuiz[quizIndex];
     const userAnswer = userAnswers[q.id];
+    const showExp = showExplanation;
     const isCorrect = userAnswer === q.correct_answer;
 
     return (
@@ -347,85 +325,82 @@ export default function App() {
           <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">問題 {quizIndex + 1} / {currentQuiz.length}</span>
           <div className="flex gap-1">
             {currentQuiz.map((_, i) => (
-              <div 
-                key={i} 
-                className={cn(
-                  "w-2 h-2 rounded-full",
-                  i === quizIndex ? "bg-emerald-500" : i < quizIndex ? "bg-emerald-200" : "bg-stone-200"
-                )} 
-              />
+              <div key={i} className={cn("w-2 h-2 rounded-full", i === quizIndex ? "bg-emerald-500" : i < quizIndex ? "bg-emerald-200" : "bg-stone-200")} />
             ))}
           </div>
         </div>
 
-        {/* 捲動區域：確保高度固定並可捲動 */}
-        <div className="flex-1 overflow-y-auto space-y-6 pb-10">
+        <div className="flex-1 overflow-y-auto space-y-6 pb-20">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
             <div className="flex items-center gap-2 mb-4">
-              <span className="px-2 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-bold rounded uppercase tracking-wider">
-                {/* 使用 includes 解決橫線/底線命名不一致的問題 */}
-                {q.type?.includes('multiple') ? '選擇題' : q.type?.includes('fill') ? '填空題' : '除錯題'}
+              <span className="px-2 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-bold rounded uppercase">
+                {/* 只要有 options 陣列且裡面有東西，就標示為選擇題 */}
+                {q.options && q.options.length > 0 ? '選擇題' : '填空題'}
               </span>
             </div>
             <h3 className="text-lg font-bold text-stone-800 leading-relaxed">{q.question}</h3>
           </div>
 
           <div className="space-y-3">
-            {/* 選擇題邏輯 */}
-            {q.type?.includes('multiple') && q.options?.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => handleAnswer(opt)}
-                disabled={showExplanation}
-                className={cn(
-                  "w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between group",
-                  showExplanation 
-                    ? opt === q.correct_answer 
-                      ? "bg-emerald-50 border-emerald-500 text-emerald-700" 
-                      : opt === userAnswer 
-                        ? "bg-red-50 border-red-500 text-red-700" 
-                        : "bg-white border-stone-100 text-stone-400"
-                    : "bg-white border-stone-100 text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/30"
-                )}
-              >
-                <span className="font-medium">{opt}</span>
-                {showExplanation && opt === q.correct_answer && <CheckCircle2 size={18} className="text-emerald-500" />}
-                {showExplanation && opt === userAnswer && opt !== q.correct_answer && <X size={18} className="text-red-500" />}
-              </button>
-            ))}
-
-            {/* 填空題與除錯題邏輯 */}
-            {(q.type?.includes('fill') || q.type?.includes('error')) && !showExplanation && (
-              <div className="space-y-4">
-                <input 
-                  type="text"
-                  autoFocus
-                  placeholder="請輸入答案..."
-                  className="w-full p-4 rounded-xl border border-stone-100 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAnswer((e.target as HTMLInputElement).value);
-                  }}
-                />
-                <button 
-                  onClick={() => {
-                    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
-                    handleAnswer(input.value);
-                  }}
-                  className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold shadow-md active:scale-95 transition-all"
-                >
-                  提交答案
-                </button>
+            {/* --- 模式 1：選擇題 (當 options 存在時) --- */}
+            {q.options && q.options.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {q.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleAnswer(opt)}
+                    disabled={showExp}
+                    className={cn(
+                      "w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between",
+                      showExp 
+                        ? opt === q.correct_answer 
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" 
+                          : opt === userAnswer 
+                            ? "bg-red-50 border-red-500 text-red-700" 
+                            : "bg-white border-stone-100 text-stone-400"
+                        : "bg-white border-stone-100 text-stone-700 active:bg-emerald-50"
+                    )}
+                  >
+                    <span>{opt}</span>
+                    {showExp && opt === q.correct_answer && <CheckCircle2 size={18} className="text-emerald-500" />}
+                    {showExp && opt === userAnswer && opt !== q.correct_answer && <X size={18} className="text-red-500" />}
+                  </button>
+                ))}
               </div>
+            ) : (
+              /* --- 模式 2：填空題 (當沒有 options 時) --- */
+              !showExp && (
+                <div className="space-y-4">
+                  <input 
+                    type="text"
+                    autoFocus
+                    placeholder="輸入答案後按 Enter 送出"
+                    className="w-full p-4 rounded-xl border border-stone-100 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-inner"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAnswer(e.currentTarget.value);
+                    }}
+                  />
+                  <button 
+                    onClick={() => {
+                      const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+                      if(input) handleAnswer(input.value);
+                    }}
+                    className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold shadow-lg"
+                  >
+                    提交答案
+                  </button>
+                </div>
+              )
             )}
 
-            {/* 填空題回答後的顯示 */}
-            {showExplanation && (q.type?.includes('fill') || q.type?.includes('error')) && (
+            {/* 填空題送出後的回答狀態 */}
+            {showExp && (!q.options || q.options.length === 0) && (
               <div className={cn(
                 "p-4 rounded-xl border flex items-center justify-between",
                 isCorrect ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-red-50 border-red-500 text-red-700"
               )}>
                 <div>
-                  <p className="text-xs font-bold uppercase opacity-50">您的答案</p>
+                  <p className="text-[10px] font-bold uppercase opacity-50">您的答案</p>
                   <p className="font-bold">{userAnswer || '(未填寫)'}</p>
                 </div>
                 {isCorrect ? <CheckCircle2 size={24} /> : <X size={24} />}
@@ -433,17 +408,12 @@ export default function App() {
             )}
           </div>
 
-          {/* 解析區塊 */}
           <AnimatePresence>
-            {showExplanation && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-4"
-              >
+            {showExp && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 {!isCorrect && (
                   <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">正確答案</p>
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">正確答案</p>
                     <p className="text-emerald-800 font-bold">{q.correct_answer}</p>
                   </div>
                 )}
@@ -456,7 +426,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={nextQuestion}
-                  className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl"
                 >
                   {quizIndex < currentQuiz.length - 1 ? '下一題' : '查看結果'}
                   <ChevronRight size={18} />
