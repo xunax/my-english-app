@@ -182,11 +182,24 @@ export default function App() {
     }
   };
 
+  // 1. 定義文法家教的靈魂劇本
+  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業的 AI 英文文法家教。
+當學生指定主題後，請嚴格執行以下「由淺入深三階段互動教學」：
+- **階段 1：核心邏輯與公式**。解釋意義與公式，出 1 題基礎練習並「停止輸出」等待回答。
+- **階段 2：常見情境與關鍵字**。學生答對後才教。介紹用法，出 1 題中翻英或重組並「停止輸出」等待。
+- **階段 3：易錯點與魔王比較**。指出常犯錯誤（如：現在完成 vs 過去簡單），出 1 題挑戰題總結。
+
+**規則：**
+1. 絕對不可一次講完！每階段結束必須出一題並閉嘴等待。
+2. 只有學生答對了，才能進入下一階段。
+3. 語氣溫柔，多用表情符號。請用繁體中文。`;
+
+  // 2. 修復後的發送訊息函數
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    // Check if user wants a quiz
+    // 自動偵測是否要啟動測驗
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -208,8 +221,21 @@ export default function App() {
 
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
-      const chatHistory = [...messages.map(m => ({ role: m.role, text: m.text })), { role: userMsg.role, text: userMsg.text }];
-      const response = await chatWithAI(textToSend, chatHistory.slice(0, -1)); // Send history excluding current message
+      
+      // 構建歷史紀錄，並根據模式加入不同的「系統指令」
+      const systemInstruction = type === 'grammar' 
+        ? { role: 'system', text: GRAMMAR_SYSTEM_PROMPT } 
+        : { role: 'system', text: '你是一個全能的英文問答助手，請簡潔、準確地回答問題。' };
+
+      // 把系統指令放在對話的最前面，讓 AI 記住自己的身份
+      const chatHistory = [
+        systemInstruction,
+        ...messages.map(m => ({ role: m.role, text: m.text }))
+      ];
+
+      // 呼叫 AI (確保傳入了正確的 Context)
+      const response = await chatWithAI(textToSend, chatHistory); 
+      
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
@@ -220,7 +246,7 @@ export default function App() {
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
-      console.error(error);
+      console.error("AI 呼叫出錯:", error);
     } finally {
       setIsTyping(false);
     }
