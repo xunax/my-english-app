@@ -182,24 +182,31 @@ export default function App() {
     }
   };
 
-// 1. 定義文法家教的靈魂劇本
-  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業的 AI 英文文法家教。
-當學生指定主題後，請嚴格執行以下「由淺入深三階段互動教學」：
-- **階段 1：核心邏輯與公式**。解釋意義與公式，出 1 題基礎練習並「停止輸出」等待回答。
-- **階段 2：常見情境與關鍵字**。學生答對後才教。介紹用法，出 1 題中翻英或重組並「停止輸出」等待。
-- **階段 3：易錯點與魔王比較**。指出常犯錯誤（如：現在完成 vs 過去簡單），出 1 題挑戰題總結。
+// 1. 定義文法家教的靈魂劇本 (加入選單與分段邏輯)
+  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業且幽默的 AI 英文文法家教。
+請根據使用者的輸入，判斷並執行以下對應情境：
+
+### 情境 A：使用者想看選單 (例如：「我想學文法」、「顯示目錄」)
+- 請輸出一個分類清晰、排版整齊的「英文文法主題列表」。
+- 必須包含：1. 各種時態 (Tenses)、2. 詞性與用法、3. 句型與語態、4. 子句 (Clauses)。
+- 引導語：「請輸入你想學習的主題（例如：我想學現在完成式），我們就開始囉！」
+
+### 情境 B：使用者指定了特定主題 (例如：「我想學現在完成式」)
+請嚴格執行「由淺入深三階段互動教學」，每階段結束必須出一題練習並「停止輸出」：
+- **階段 1：核心邏輯與公式**。解釋意義 + 公式 + 2個例句。出一道基礎練習題並「等待回答」。
+- **階段 2：常見情境與關鍵字**。學生答對後，介紹用法與關鍵字。出一道題目並「等待回答」。
+- **階段 3：易錯點與魔王比較**。指出台灣學生常犯錯誤，出一道挑戰題作為總結。
 
 **規則：**
-1. 絕對不可一次講完！每階段結束必須出一題並閉嘴等待。
-2. 只有學生答對了，才能進入下一階段。
-3. 語氣溫柔，多用表情符號。請用繁體中文。`;
+1. 絕對不可一次講完！每階段必須等學生答對才能繼續。
+2. 答錯時請溫柔糾正，並出一題相似的新題目。
+3. 用繁體中文，語氣溫和且多用表情符號。`;
 
-  // 2. 修復後的發送訊息函數
+  // 2. 發送訊息函數 (維持你測試正常的結構)
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    // 自動偵測是否要啟動測驗
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -222,18 +229,15 @@ export default function App() {
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 構建歷史紀錄，並根據模式加入不同的「系統指令」
       const systemInstruction = type === 'grammar' 
         ? { role: 'system', text: GRAMMAR_SYSTEM_PROMPT } 
         : { role: 'system', text: '你是一個全能的英文問答助手，請簡潔、準確地回答問題。' };
 
-      // 把系統指令放在對話的最前面，讓 AI 記住自己的身份
       const chatHistory = [
         systemInstruction,
         ...messages.map(m => ({ role: m.role, text: m.text }))
       ];
 
-      // 呼叫 AI (確保傳入了正確的 Context)
       const response = await chatWithAI(textToSend, chatHistory); 
       
       const aiMsg: ChatMessage = {
