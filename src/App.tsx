@@ -182,59 +182,59 @@ export default function App() {
     }
   };
 
-// 這裡放最強勢的指令，放在函數外面才不會讓下面亂成一團
-const FINAL_GRAMMAR_PROMPT = `你是一位超級溫柔且幽默的 AI 英文家教。
-請不要像課本一樣死板，用像在跟我聊天的方式教學！
-1. 要求目錄時：列出時態、詞性、句型、子句，多用 emoji。
-2. 指定主題時：執行由淺入深三階段教學。
-   - 第一階段：白話解釋 + 公式 + 2個生活例句 + 1題測驗。
-   - 第二階段：介紹情境與常用字 + 1題練習。
-   - 第三階段：抓出台灣人常犯錯誤 + 1題進階挑戰。
-3. 重要規則：每次只講一個階段，出一題測驗後必須「停止輸出」，等我回答。
-4. 答對要誇獎我，答錯要鼓勵並重新出一題。
-請全程使用繁體中文，語氣要輕鬆有活力！`;
+  // 1. 定義文法家教的靈魂劇本（確保格式精簡）
+  const FINAL_GRAMMAR_PROMPT = `你是一位超級溫柔且幽默的 AI 英文家教。請不要像課本一樣死板，用像在跟我聊天的方式教學！
+  1. 要求目錄時：列出時態、詞性、句型、子句，多用 emoji。
+  2. 指定主題時：執行由淺入深三階段教學。
+     - 第一階段：白話解釋 + 公式 + 2個生活例句 + 1題測驗。
+     - 第二階段：介紹情境與常用字 + 1題練習。
+     - 第三階段：抓出台灣人常犯錯誤 + 1題進階挑戰。
+  3. 重要規則：每次只講一個階段，出一題測驗後必須「停止輸出」，等我回答。
+  4. 答對要誇獎我，答錯要鼓勵並重新出一題。
+  請全程使用繁體中文，語氣要輕鬆有活力！`;
   
-const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+  // 2. 修復後的發送邏輯
+  const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
-
-    // 自動偵測測驗
+  
+    // 自動偵測測驗關鍵字
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
       return;
     }
-
+  
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       text: textToSend,
       timestamp: Date.now(),
     };
-
+  
     if (type === 'qa') setQaMessages(prev => [...prev, userMsg]);
     else setGrammarMessages(prev => [...prev, userMsg]);
-
+  
     setInputValue('');
     setIsTyping(true);
-
+  
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 構建包含靈魂劇本的歷史紀錄
-      const chatHistory = [
-        { 
-          role: 'system', 
-          text: type === 'grammar' ? FINAL_GRAMMAR_PROMPT : '你是一個簡潔的英文問答助手。' 
-        },
-        ...messages.map(m => ({ 
-          role: m.role === 'user' ? 'user' : 'model', 
-          text: m.text 
-        }))
-      ];
-
-      // 呼叫 AI (直接傳送 textToSend，不要再黏 Prompt 了，避免 AI 混淆)
-      const response = await chatWithAI(textToSend, chatHistory); 
+      // 構建純淨歷史：只准有 user 和 model，避免 API 報錯
+      const chatHistory = messages.map(m => ({ 
+        role: m.role === 'user' ? 'user' : 'model', 
+        text: m.text 
+      }));
+  
+      // 【關鍵修復】：如果是文法模式，把劇本黏在當前問題前面發送
+      // 這樣不使用 system role 也能強制 AI 遵守家教規則
+      const finalInputForAI = type === 'grammar' 
+        ? `${FINAL_GRAMMAR_PROMPT}\n\n【現在學生輸入】：${textToSend}` 
+        : textToSend;
+  
+      // 呼叫 AI API (傳送組合後的文字)
+      const response = await chatWithAI(finalInputForAI, chatHistory); 
       
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -242,7 +242,7 @@ const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string)
         text: response || '老師暫時走開了，請稍後再試。',
         timestamp: Date.now(),
       };
-
+  
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
