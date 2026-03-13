@@ -186,7 +186,15 @@ const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string)
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    // 1. 自動偵測測驗關鍵字
+    // 1. 文法老師的完美劇本（直接定義為字串）
+    const grammarPrompt = `【系統指令：你是一位專業英文家教】
+請依照以下兩種情境互動：
+情境 A：要求目錄（如輸入「我想學文法」）-> 請輸出排版整齊的「文法主題列表」(含時態、詞性、句型、子句)並引導挑選。
+情境 B：指定文法（如輸入「我想學現在完成式」）-> **絕對不可一次講完！** 請嚴格執行「由淺入深三階段教學」，每階段出一題練習並「停止輸出」等學生回答。答對才進下一關。
+
+當前學生輸入：`;
+
+    // 處理測驗跳轉
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -209,48 +217,32 @@ const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string)
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 2. 直接注入你提供的那段「完美指令」作為劇本
-      const grammarInstruction = `你是一位專業且幽默的 AI 英文文法家教。
-請依照以下兩種情境進行互動：
+      // 2. 構建「純淨歷史」：只准有 user 和 model，絕對不放 system
+      const chatHistory = messages.map(m => ({ 
+        role: m.role === 'user' ? 'user' : 'model', 
+        text: m.text 
+      }));
 
-【情境 A：要求目錄】（如輸入「我想學文法」、「列出所有文法」）
-- 請輸出一個分類清晰、排版整齊的「英文文法主題列表」。
-- 包含：1. 各種時態 (Tenses) 2. 詞性與用法 3. 句型與語態 4. 子句 (Clauses)。
-- 引導語：「請輸入你想學習的文法主題（例如：我想學現在完成式），我們就可以開始囉！」
+      // 3. 組合最後發送的文字
+      // 如果是文法模式，我們把指令「黏」在訊息前面
+      const finalPayload = type === 'grammar' 
+        ? `${grammarPrompt}${textToSend}` 
+        : textToSend;
 
-【情境 B：指定特定文法】（如輸入「我想學現在完成式」）
-- **警告：絕對不可以一次把所有內容塞給使用者！**
-- 請嚴格採用「由淺入深的三階段互動教學」。每教完一個階段，必須出一道題目練習，並「停止輸出，等待使用者回答」。
-
-教學流程規範：
-- 第一階段（概念與公式）：白話解釋核心意義與公式，附上 2 個例句。出 1 題「選擇題」或「填空題」讓使用者試做。（等待回答）
-- 第二階段（常見情境與關鍵字）：答對後，介紹生活情境與搭配字。出 1 題「句子重組」或「簡單中翻英」。（等待回答）
-- 第三階段（易錯點與大魔王比較）：過關後，點出台灣學生最常犯錯誤，或相似文法比較。出 1 題「進階挑戰題」總結。
-
-若使用者答錯，請耐心解釋為什麼錯，並再出一題類似的題目讓他確認自己真的學會了。`;
-
-      const qaInstruction = "你是一個全能的英文問答助手，請簡潔、準確地回答問題。";
-
-      // 3. 構建歷史紀錄，將指令放在第一筆
-      const chatHistory = [
-        { role: 'system', text: type === 'grammar' ? grammarInstruction : qaInstruction },
-        ...messages.map(m => ({ role: m.role, text: m.text }))
-      ];
-
-      // 4. 呼叫 AI API
-      const response = await chatWithAI(textToSend, chatHistory); 
+      // 4. 呼叫 AI (傳送組合後的文字與純淨歷史)
+      const response = await chatWithAI(finalPayload, chatHistory); 
       
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response || '抱歉，我現在無法回答，請稍後再試。',
+        text: response || '抱歉，我現在遇到一點問題，請稍後再試。',
         timestamp: Date.now(),
       };
 
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
-      console.error("AI 呼叫出錯:", error);
+      console.error("AI 呼叫失敗:", error);
     } finally {
       setIsTyping(false);
     }
