@@ -37,7 +37,7 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// ✨ 介面定義：完全對應資料庫欄位
+// ✨ 介面定義：嚴格對應資料庫欄位
 interface WordAnalysis {
   id?: number;
   word: string;
@@ -71,13 +71,14 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔄 讀取資料庫歷史紀錄 + 按照 ID 順序排列
+  // 🔄 從資料庫載入紀錄並按 ID 排序
   useEffect(() => {
     const loadSavedWords = async () => {
       try {
         const response = await fetch('/api/get-words');
         if (response.ok) {
           const data = await response.json();
+          // ✨ 確保按照 ID 順序排列
           const sortedData = data.sort((a: any, b: any) => (a.id || 0) - (b.id || 0));
           setHistory(sortedData); 
         }
@@ -92,7 +93,6 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [qaMessages, grammarMessages]);
 
-  // 🚀 發送邏輯：直接發送，讓 gemini.ts 的 systemInstruction 發揮作用
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
@@ -112,7 +112,7 @@ export default function App() {
 
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
-      // 構建純淨歷史紀錄，不傳送額外的 system role 以免衝突
+      // 構建純淨歷史，讓 gemini.ts 內建的 systemInstruction 生效
       const chatHistory = messages.map(m => ({ 
         role: m.role === 'user' ? 'user' : 'model', 
         text: m.text 
@@ -128,12 +128,6 @@ export default function App() {
     } finally {
       setIsTyping(false);
     }
-  };
-
-  const speak = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    window.speechSynthesis.speak(utterance);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,6 +194,12 @@ export default function App() {
     }
   };
 
+  const speak = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
   const renderQuizTab = () => {
     if (isGeneratingQuiz) return <div className="flex flex-col items-center justify-center h-full"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>;
     if (quizScore !== null) return (
@@ -207,14 +207,14 @@ export default function App() {
         <CheckCircle2 size={64} className="text-emerald-500" />
         <h2 className="text-2xl font-bold">測驗完成！</h2>
         <p className="text-stone-500">得分：{quizScore} / {currentQuiz.length}</p>
-        <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold">返回學習足跡</button>
+        <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg">查看學習足跡</button>
       </div>
     );
 
     if (currentQuiz.length === 0) return (
       <div className="p-6 text-center flex flex-col justify-center h-full space-y-6">
         <BookOpen size={64} className="mx-auto text-emerald-100" />
-        <h3 className="text-xl font-bold text-stone-800">準備挑戰？</h3>
+        <h3 className="text-xl font-bold text-stone-800">準備好挑戰了嗎？</h3>
         <button onClick={() => handleStartQuiz()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold">開始複習單字</button>
       </div>
     );
@@ -225,13 +225,13 @@ export default function App() {
         <h3 className="text-lg font-bold mb-4">{q.question}</h3>
         <div className="space-y-3">
           {q.options?.map((opt, i) => (
-            <button key={i} onClick={() => handleAnswer(opt)} className={cn("w-full p-4 rounded-xl border text-left", showExplanation ? (opt === q.correct_answer ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" : opt === userAnswers[q.id] ? "bg-red-50 border-red-500 text-red-700" : "bg-white") : "bg-white hover:bg-emerald-50")}>{opt}</button>
+            <button key={i} onClick={() => handleAnswer(opt)} className={cn("w-full p-4 rounded-xl border text-left transition-all", showExplanation ? (opt === q.correct_answer ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" : opt === userAnswers[q.id] ? "bg-red-50 border-red-500 text-red-700" : "bg-white") : "bg-white hover:bg-emerald-50")}>{opt}</button>
           ))}
         </div>
         {showExplanation && (
           <div className="mt-6 p-5 bg-stone-100 rounded-2xl">
             <h4 className="font-bold text-stone-800 mb-2">解析：</h4>
-            <p className="text-sm text-stone-600 leading-relaxed">{q.explanation}</p>
+            <p className="text-sm text-stone-600">{q.explanation}</p>
             <button onClick={nextQuestion} className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold">下一題</button>
           </div>
         )}
@@ -241,7 +241,7 @@ export default function App() {
 
   const renderScanTab = () => (
     <div className="flex flex-col h-full bg-white">
-      <div className="p-6 text-center border-b border-stone-50"><h2 className="text-2xl font-bold text-stone-800">跨頁單字辨識</h2></div>
+      <div className="p-6 text-center border-b border-stone-50"><h2 className="text-2xl font-bold text-stone-800 tracking-tight">跨頁單字辨識</h2></div>
       <div className="flex-1 overflow-y-auto px-6 pb-20">
         {isAnalyzing ? <div className="flex flex-col items-center justify-center h-64"><Loader2 className="animate-spin text-emerald-500" size={32} /></div> : (
           <div className="space-y-4 pt-4">
@@ -253,9 +253,9 @@ export default function App() {
               </div>
             ))}
             {scannedWords.length === 0 && (
-              <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 transition-all mt-8">
+              <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 mt-8">
                 <Camera className="text-stone-300 mb-2" size={40} />
-                <p>點擊選擇照片</p>
+                <p className="text-stone-500 font-medium">點擊選擇照片</p>
               </div>
             )}
           </div>
@@ -269,15 +269,15 @@ export default function App() {
     const messages = type === 'qa' ? qaMessages : grammarMessages;
     return (
       <div className="flex flex-col h-full bg-white">
-        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-white sticky top-0 z-10">
+        <div className="p-4 border-b border-stone-100 flex justify-between items-center sticky top-0 bg-white z-10">
           <h2 className="font-bold text-stone-800">{type === 'qa' ? 'AI 英文問答' : '文法學習區塊'}</h2>
           {messages.length > 0 && <button onClick={() => type === 'qa' ? setQaMessages([]) : setGrammarMessages([])} className="text-stone-300 hover:text-red-500"><X size={18} /></button>}
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
-              <BookOpen size={64} className="text-emerald-100" />
-              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '常見錯誤' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
+              <BookOpen size={48} className="text-emerald-100" />
+              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '單字辨析' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
             </div>
           )}
           {messages.map((msg) => (
@@ -299,12 +299,12 @@ export default function App() {
     );
   };
 
-  // ✨ 關鍵修正：修復紀錄區顯示詞性、型態與例句
+  // ✨ 關鍵修正：學習足跡顯示 (完整對齊資料庫欄位)
   const renderHistoryTab = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="p-6 border-b border-stone-100 bg-white sticky top-0 z-10">
         <h2 className="text-xl font-bold text-stone-800">學習足跡</h2>
-        <p className="text-xs text-stone-500">已辨識過的 {history.length} 個單字 (依 ID 排序)</p>
+        <p className="text-xs text-stone-500">已錄入 {history.length} 個單字 (依 ID 排序)</p>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pt-4 pb-28 space-y-4">
         {history.length === 0 ? <div className="flex flex-col items-center justify-center h-64 opacity-20"><History size={48} /><p className="font-bold mt-2">尚無紀錄</p></div> : (
@@ -315,21 +315,22 @@ export default function App() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] text-emerald-500 font-mono font-bold">#{item.id}</span>
                     <h3 className="text-lg font-bold text-stone-800">{item.word}</h3>
+                    {/* 使用底線命名對應資料庫欄位 */}
                     <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded font-bold uppercase">{item.part_of_speech}</span>
                   </div>
                   <p className="text-[11px] text-stone-400 font-mono">{item.pronunciation}</p>
                 </div>
-                <button onClick={() => speak(item.word)} className="p-2 text-stone-200 hover:text-emerald-500 transition-colors"><Volume2 size={18} /></button>
+                <button onClick={() => speak(item.word)} className="p-2 text-stone-200 hover:text-emerald-500 transition-colors ml-4"><Volume2 size={18} /></button>
               </div>
-              <p className="text-stone-700 font-medium mb-2">{item.meaning}</p>
+              <p className="text-stone-700 font-medium mb-3">{item.meaning}</p>
               
-              {/* ✨ 補回型態與例句 */}
+              {/* 顯示型態與完整中英文例句 */}
               {item.forms && item.forms !== '無' && (
-                <p className="text-[10px] text-emerald-600 font-bold mb-2">型態：{item.forms}</p>
+                <p className="text-[10px] text-emerald-600 font-bold mb-2 bg-emerald-50 w-fit px-2 py-0.5 rounded-full">型態：{item.forms}</p>
               )}
               {item.example_en && (
                 <div className="mt-2 pt-2 border-t border-stone-50">
-                  <p className="text-xs text-stone-500 italic">"{item.example_en}"</p>
+                  <p className="text-xs text-stone-500 italic leading-relaxed">"{item.example_en}"</p>
                   <p className="text-[10px] text-stone-400 mt-1">{item.example_tw}</p>
                 </div>
               )}
@@ -343,7 +344,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-stone-50 max-w-md mx-auto relative overflow-hidden shadow-2xl">
       <header className="bg-white px-6 py-4 border-b border-stone-100 z-20 flex justify-between">
-        <h1 className="font-bold text-stone-800">English Tutor</h1>
+        <h1 className="font-bold text-stone-800 tracking-tight">English Tutor</h1>
         <span className="text-[10px] text-emerald-500 font-bold">ONLINE</span>
       </header>
 
