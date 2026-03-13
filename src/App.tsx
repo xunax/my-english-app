@@ -182,32 +182,20 @@ export default function App() {
     }
   };
 
-// 1. 定義最強大腦劇本 (包含目錄與三階段教學)
-  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業且幽默的英文家教。請根據輸入判斷情境：
-
-### 情境 A：使用者想看選單 (例如：「我想學文法」、「目錄」)
-- 請輸出排版漂亮的「文法主題列表」。
-- 包含：1. 各種時態 2. 詞性用法 3. 句型語態 4. 子句。
-- 結尾引導：「請輸入你想學的主題，我們就開始囉！」
-
-### 情境 B：指定主題 (例如：「我想學現在完成式」)
-請嚴格執行「由淺入深三階段互動教學」，每階段結束必須出一題練習並「停止輸出」：
-- **階段 1：核心邏輯與公式**。解釋意義 + 公式 + 2個例句。出 1 題基礎練習並「等待回答」。
-- **階段 2：常見情境與關鍵字**。介紹用法與搭配詞。出 1 題句子重組並「等待回答」。
-- **階段 3：易錯點與魔王比較**。指出台灣學生最常犯錯誤（如：現在完成 vs 過去簡單），出 1 題進階挑戰題總結。
-
-**絕對規則：**
-1. 每次回覆只能教「一個階段」。
-2. 必須出一題練習題，並在題目結束後「停止輸出」，等待學生回答。
-3. 學生答對才能進入下一階段；答錯要溫柔糾正並出一題相似的新題目。
-4. 使用繁體中文，多用表情符號。`;
-
-  // 2. 完整的發送訊息邏輯
-  const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    // 自動轉向測驗模式
+    // 定義文法家教的指令
+    const GRAMMAR_PROMPT = `你是一位專業英文家教。請遵守規則：
+1. 聽到「我想學文法」或「目錄」請列出文法清單(時態、詞性、句型、子句)。
+2. 指定主題後，執行三階段教學：(1)核心公式、(2)常見情境、(3)易錯比較。
+3. 每次只教一個階段，出一題練習後必須「停止輸出」等回答。
+4. 答對才進下一關。用繁體中文+表情符號。
+
+目前的學習請求：`;
+
+    // 處理測驗轉向
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -230,31 +218,28 @@ export default function App() {
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 根據當前分頁決定 AI 的身分
-      const systemInstruction = type === 'grammar' 
-        ? { role: 'system', text: GRAMMAR_SYSTEM_PROMPT } 
-        : { role: 'system', text: '你是一個全能的英文問答助手，請簡潔、準確地回答問題。' };
+      // 構建歷史紀錄 (只使用 user 和 model 角色，確保不噴錯)
+      const chatHistory = messages.map(m => ({ 
+        role: m.role === 'user' ? 'user' : 'model', 
+        text: m.text 
+      }));
 
-      // 構建包含系統指令的歷史紀錄
-      const chatHistory = [
-        systemInstruction,
-        ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', text: m.text }))
-      ];
+      // 如果是文法模式，把指令黏在訊息最前面發送
+      const finalInput = type === 'grammar' ? `${GRAMMAR_PROMPT}${textToSend}` : textToSend;
 
-      // 呼叫 AI API
-      const response = await chatWithAI(textToSend, chatHistory); 
+      const response = await chatWithAI(finalInput, chatHistory); 
       
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response || '抱歉，我現在遇到一點問題，請再試一次。',
+        text: response || '抱歉，請稍後再試。',
         timestamp: Date.now(),
       };
 
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
-      console.error("發送訊息失敗:", error);
+      console.error("發送失敗:", error);
     } finally {
       setIsTyping(false);
     }
