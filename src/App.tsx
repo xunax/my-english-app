@@ -182,24 +182,32 @@ export default function App() {
     }
   };
 
-  // 1. 定義文法家教的靈魂劇本
-  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業的 AI 英文文法家教。
-當學生指定主題後，請嚴格執行以下「由淺入深三階段互動教學」：
-- **階段 1：核心邏輯與公式**。解釋意義與公式，出 1 題基礎練習並「停止輸出」等待回答。
-- **階段 2：常見情境與關鍵字**。學生答對後才教。介紹用法，出 1 題中翻英或重組並「停止輸出」等待。
-- **階段 3：易錯點與魔王比較**。指出常犯錯誤（如：現在完成 vs 過去簡單），出 1 題挑戰題總結。
+// 1. 定義最強大腦劇本 (包含目錄與三階段教學)
+  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業且幽默的英文家教。請根據輸入判斷情境：
 
-**規則：**
-1. 絕對不可一次講完！每階段結束必須出一題並閉嘴等待。
-2. 只有學生答對了，才能進入下一階段。
-3. 語氣溫柔，多用表情符號。請用繁體中文。`;
+### 情境 A：使用者想看選單 (例如：「我想學文法」、「目錄」)
+- 請輸出排版漂亮的「文法主題列表」。
+- 包含：1. 各種時態 2. 詞性用法 3. 句型語態 4. 子句。
+- 結尾引導：「請輸入你想學的主題，我們就開始囉！」
 
-  // 2. 修復後的發送訊息函數
+### 情境 B：指定主題 (例如：「我想學現在完成式」)
+請嚴格執行「由淺入深三階段互動教學」，每階段結束必須出一題練習並「停止輸出」：
+- **階段 1：核心邏輯與公式**。解釋意義 + 公式 + 2個例句。出 1 題基礎練習並「等待回答」。
+- **階段 2：常見情境與關鍵字**。介紹用法與搭配詞。出 1 題句子重組並「等待回答」。
+- **階段 3：易錯點與魔王比較**。指出台灣學生最常犯錯誤（如：現在完成 vs 過去簡單），出 1 題進階挑戰題總結。
+
+**絕對規則：**
+1. 每次回覆只能教「一個階段」。
+2. 必須出一題練習題，並在題目結束後「停止輸出」，等待學生回答。
+3. 學生答對才能進入下一階段；答錯要溫柔糾正並出一題相似的新題目。
+4. 使用繁體中文，多用表情符號。`;
+
+  // 2. 完整的發送訊息邏輯
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    // 自動偵測是否要啟動測驗
+    // 自動轉向測驗模式
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -222,36 +230,36 @@ export default function App() {
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 構建歷史紀錄，並根據模式加入不同的「系統指令」
+      // 根據當前分頁決定 AI 的身分
       const systemInstruction = type === 'grammar' 
         ? { role: 'system', text: GRAMMAR_SYSTEM_PROMPT } 
         : { role: 'system', text: '你是一個全能的英文問答助手，請簡潔、準確地回答問題。' };
 
-      // 把系統指令放在對話的最前面，讓 AI 記住自己的身份
+      // 構建包含系統指令的歷史紀錄
       const chatHistory = [
         systemInstruction,
-        ...messages.map(m => ({ role: m.role, text: m.text }))
+        ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', text: m.text }))
       ];
 
-      // 呼叫 AI (確保傳入了正確的 Context)
+      // 呼叫 AI API
       const response = await chatWithAI(textToSend, chatHistory); 
       
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response || '抱歉，我現在無法回答，請稍後再試。',
+        text: response || '抱歉，我現在遇到一點問題，請再試一次。',
         timestamp: Date.now(),
       };
 
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
-      console.error("AI 呼叫出錯:", error);
+      console.error("發送訊息失敗:", error);
     } finally {
       setIsTyping(false);
     }
   };
-
+  
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
