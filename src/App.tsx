@@ -182,31 +182,11 @@ export default function App() {
     }
   };
 
-// 1. 定義文法家教的靈魂劇本 (加入選單與分段邏輯)
-  const GRAMMAR_SYSTEM_PROMPT = `你是一位專業且幽默的 AI 英文文法家教。
-請根據使用者的輸入，判斷並執行以下對應情境：
-
-### 情境 A：使用者想看選單 (例如：「我想學文法」、「顯示目錄」)
-- 請輸出一個分類清晰、排版整齊的「英文文法主題列表」。
-- 必須包含：1. 各種時態 (Tenses)、2. 詞性與用法、3. 句型與語態、4. 子句 (Clauses)。
-- 引導語：「請輸入你想學習的主題（例如：我想學現在完成式），我們就開始囉！」
-
-### 情境 B：使用者指定了特定主題 (例如：「我想學現在完成式」)
-請嚴格執行「由淺入深三階段互動教學」，每階段結束必須出一題練習並「停止輸出」：
-- **階段 1：核心邏輯與公式**。解釋意義 + 公式 + 2個例句。出一道基礎練習題並「等待回答」。
-- **階段 2：常見情境與關鍵字**。學生答對後，介紹用法與關鍵字。出一道題目並「等待回答」。
-- **階段 3：易錯點與魔王比較**。指出台灣學生常犯錯誤，出一道挑戰題作為總結。
-
-**規則：**
-1. 絕對不可一次講完！每階段必須等學生答對才能繼續。
-2. 答錯時請溫柔糾正，並出一題相似的新題目。
-3. 用繁體中文，語氣溫和且多用表情符號。`;
-
-  // 2. 發送訊息函數 (維持你測試正常的結構)
-  const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
+    // 1. 自動偵測測驗關鍵字
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
@@ -229,15 +209,35 @@ export default function App() {
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      const systemInstruction = type === 'grammar' 
-        ? { role: 'system', text: GRAMMAR_SYSTEM_PROMPT } 
-        : { role: 'system', text: '你是一個全能的英文問答助手，請簡潔、準確地回答問題。' };
+      // 2. 直接注入你提供的那段「完美指令」作為劇本
+      const grammarInstruction = `你是一位專業且幽默的 AI 英文文法家教。
+請依照以下兩種情境進行互動：
 
+【情境 A：要求目錄】（如輸入「我想學文法」、「列出所有文法」）
+- 請輸出一個分類清晰、排版整齊的「英文文法主題列表」。
+- 包含：1. 各種時態 (Tenses) 2. 詞性與用法 3. 句型與語態 4. 子句 (Clauses)。
+- 引導語：「請輸入你想學習的文法主題（例如：我想學現在完成式），我們就可以開始囉！」
+
+【情境 B：指定特定文法】（如輸入「我想學現在完成式」）
+- **警告：絕對不可以一次把所有內容塞給使用者！**
+- 請嚴格採用「由淺入深的三階段互動教學」。每教完一個階段，必須出一道題目練習，並「停止輸出，等待使用者回答」。
+
+教學流程規範：
+- 第一階段（概念與公式）：白話解釋核心意義與公式，附上 2 個例句。出 1 題「選擇題」或「填空題」讓使用者試做。（等待回答）
+- 第二階段（常見情境與關鍵字）：答對後，介紹生活情境與搭配字。出 1 題「句子重組」或「簡單中翻英」。（等待回答）
+- 第三階段（易錯點與大魔王比較）：過關後，點出台灣學生最常犯錯誤，或相似文法比較。出 1 題「進階挑戰題」總結。
+
+若使用者答錯，請耐心解釋為什麼錯，並再出一題類似的題目讓他確認自己真的學會了。`;
+
+      const qaInstruction = "你是一個全能的英文問答助手，請簡潔、準確地回答問題。";
+
+      // 3. 構建歷史紀錄，將指令放在第一筆
       const chatHistory = [
-        systemInstruction,
+        { role: 'system', text: type === 'grammar' ? grammarInstruction : qaInstruction },
         ...messages.map(m => ({ role: m.role, text: m.text }))
       ];
 
+      // 4. 呼叫 AI API
       const response = await chatWithAI(textToSend, chatHistory); 
       
       const aiMsg: ChatMessage = {
