@@ -189,7 +189,7 @@ export default function App() {
   3. **警告：每次只教一階段！** 出 1 題後必須「停止輸出」等回答。
   4. 答對才進下一階段。用繁體中文+表情符號。`;
   
-const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+  const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
