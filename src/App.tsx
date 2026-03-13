@@ -182,71 +182,66 @@ export default function App() {
     }
   };
 
-  // 這裡放最強勢的指令，放在函數外面才不會讓下面亂成一團
-  const FINAL_GRAMMAR_PROMPT = `你是專業英文家教。請無視之前進度，嚴格執行：
-  1. 若學生說「我想學文法」或「目錄」，務必列出：1.時態 2.詞性 3.句型 4.子句，並停止教學。
-  2. 若學生指定主題，執行三階段教學(公式、情境、易錯比較)。
-  3. **警告：每次只教一階段！** 出 1 題後必須「停止輸出」等回答。
-  4. 答對才進下一階段。用繁體中文+表情符號。`;
+    // 1. 唯一劇本：不管在哪個模式，都當溫柔老師
+  const FINAL_PROMPT = `你是一位超級溫柔的 AI 英文老師。
+  1. 如果我說「我想學文法」或「目錄」，請列出：時態、詞性、句型、子句。
+  2. 如果我指定主題，請分「三階段」教學，每階段出一題測驗並「停止輸出」等我回答。
+  3. 答對要誇獎我，答錯要鼓勵。請用繁體中文+表情符號。`;
   
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
-
-    // 自動偵測測驗
+  
+    // 測驗跳轉邏輯
     if (textToSend.includes('出題') || textToSend.includes('測驗') || textToSend.includes('練習')) {
       handleStartQuiz(textToSend);
       setInputValue('');
       return;
     }
-
+  
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       text: textToSend,
       timestamp: Date.now(),
     };
-
+  
+    // 根據分頁存到對應訊息區
     if (type === 'qa') setQaMessages(prev => [...prev, userMsg]);
     else setGrammarMessages(prev => [...prev, userMsg]);
-
+  
     setInputValue('');
     setIsTyping(true);
-
+  
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       
-      // 構建包含靈魂劇本的歷史紀錄
-      const chatHistory = [
-        { 
-          role: 'system', 
-          text: type === 'grammar' ? FINAL_GRAMMAR_PROMPT : '你是一個簡潔的英文問答助手。' 
-        },
-        ...messages.map(m => ({ 
-          role: m.role === 'user' ? 'user' : 'model', 
-          text: m.text 
-        }))
-      ];
-
-      // 呼叫 AI (直接傳送 textToSend，不要再黏 Prompt 了，避免 AI 混淆)
-      const response = await chatWithAI(textToSend, chatHistory); 
+      // 只用 user 和 model，這是最絕對不會出錯的格式
+      const chatHistory = messages.map(m => ({ 
+        role: m.role === 'user' ? 'user' : 'model', 
+        text: m.text 
+      }));
+  
+      // 把劇本黏在問題最前面，確保 AI 每一句都看到規則
+      const finalInput = `${FINAL_PROMPT}\n\n學生現在輸入：${textToSend}`;
+  
+      const response = await chatWithAI(finalInput, chatHistory); 
       
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response || '老師暫時走開了，請稍後再試。',
+        text: response || '老師暫時走開了，請再試一次。',
         timestamp: Date.now(),
       };
-
+  
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error) {
       console.error("發送失敗:", error);
     } finally {
-      setIsTyping(false);
+      setIsTyping(false); // 確保轉圈圈一定會消失
     }
   };
-  
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
