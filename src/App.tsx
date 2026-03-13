@@ -37,7 +37,7 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// ✨ 介面定義：嚴格對照資料庫欄位名稱 (Snake Case)
+// ✨ 介面定義：嚴格對照資料庫欄位名稱
 interface WordAnalysis {
   id?: number;
   word: string;
@@ -49,26 +49,20 @@ interface WordAnalysis {
   forms?: string;
 }
 
-// 1. 文法老師靈魂劇本 (三階段互動版本)
-const FINAL_GRAMMAR_PROMPT = `你是一位專業且幽默的 AI 英文文法家教。
-請依照以下兩種情境進行互動：
+// 1. 文法老師最強指令 (指令黏貼法，保證文法功能不壞掉)
+const GRAMMAR_INSTRUCTION = `你是專業英文家教。請嚴格執行：
+1. 若學生說「我想學文法」或「目錄」-> 列出：時態、詞性、句型、子句並引導挑選。
+2. 若學生指定文法 -> 執行由淺入深三階段教學(公式、情境、易錯)。
+3. **警告：每次只教一階段！** 出 1 題測驗後必須「停止輸出」等回答。
+4. 答對才進下一階段。用繁體中文+表情符號。`;
 
-【情境 A：要求文法目錄】
-請輸出排版整齊的「英文文法主題列表」，包含：各種時態、詞性、句型語態、子句。並引導學生挑選。
-
-【情境 B：指定特定文法】
-警告：絕對不可以一次講完！請嚴格執行「由淺入深三階段教學」：
-- 第一階段（概念與公式）：用白話解釋意義與公式，附上 2 個例句。出一題測驗並「停止輸出」等待回答。
-- 第二階段（常見情境與關鍵字）：答對後，介紹情境與常用字。出一題練習題並「停止輸出」等待回答。
-- 第三階段（易錯點與魔王比較）：過關後，抓出常犯錯誤，出一題挑戰題總結。
-
-若學生答錯，請耐心解釋並再出一題類似的。請全程用繁體中文。`;
+const QA_INSTRUCTION = "你是一個簡潔的英文問答助手，請用繁體中文回答。";
 
 function QuickActionBtn({ onClick, label }: { onClick: () => void, label: string }) {
   return (
     <button 
       onClick={onClick}
-      className="w-full py-2.5 px-4 bg-stone-50 text-stone-600 text-sm font-medium rounded-xl border border-stone-100 hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left flex items-center justify-between group"
+      className="w-full py-2.5 px-4 bg-stone-50 text-stone-600 text-sm font-medium rounded-xl border border-stone-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-100 transition-all text-left flex items-center justify-between group"
     >
       {label}
       <ChevronRight size={16} className="text-stone-300 group-hover:text-emerald-400 transition-colors" />
@@ -98,19 +92,18 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔄 讀取資料庫紀錄：包含 ID 排序與欄位對齊
+  // 🔄 讀取資料庫歷史紀錄 + 按照 ID 順序排列
   useEffect(() => {
     const loadSavedWords = async () => {
       try {
         const response = await fetch('/api/get-words');
         if (response.ok) {
           const data = await response.json();
-          // ✨ 按照 ID 順序排列
           const sortedData = data.sort((a: any, b: any) => (a.id || 0) - (b.id || 0));
           setHistory(sortedData); 
         }
       } catch (error) {
-        console.error("資料庫讀取失敗：", error);
+        console.error("資料讀取失敗：", error);
       }
     };
     loadSavedWords();
@@ -120,6 +113,7 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [qaMessages, grammarMessages]);
 
+  // 2. 核心發送：採用前置指令法，保證 AI 每一輪都記得規則且不噴錯
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
@@ -139,12 +133,13 @@ export default function App() {
 
     try {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
-      const systemInstruction = { 
-        role: 'system', 
-        text: type === 'grammar' ? FINAL_GRAMMAR_PROMPT : '你是一個簡潔的英文助教。' 
-      };
-      const chatHistory = [systemInstruction, ...messages.map(m => ({ role: m.role, text: m.text }))];
-      const response = await chatWithAI(textToSend, chatHistory); 
+      const chatHistory = messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', text: m.text }));
+      
+      // 組合最終指令
+      const prompt = type === 'grammar' ? GRAMMAR_INSTRUCTION : QA_INSTRUCTION;
+      const finalInput = `${prompt}\n\n目前學生輸入：${textToSend}`;
+
+      const response = await chatWithAI(finalInput, chatHistory); 
       const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response || '請稍後再試。', timestamp: Date.now() };
 
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
@@ -154,12 +149,6 @@ export default function App() {
     } finally {
       setIsTyping(false);
     }
-  };
-
-  const speak = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    window.speechSynthesis.speak(utterance);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,7 +189,7 @@ export default function App() {
     setShowExplanation(false);
     setQuizScore(null);
     try {
-      const quizContext = context || (history.length > 0 ? `複習單字：${history.map(w => w.word).join(', ')}` : "英文文法測驗");
+      const quizContext = context || (history.length > 0 ? `複習：${history.map(w => w.word).join(', ')}` : "基礎英文測驗");
       const quiz = await generateQuiz(quizContext);
       setCurrentQuiz(quiz);
     } catch (error) {
@@ -226,29 +215,35 @@ export default function App() {
     }
   };
 
+  const speak = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
   const renderQuizTab = () => {
     if (isGeneratingQuiz) return <div className="flex flex-col items-center justify-center h-full"><Loader2 className="animate-spin text-emerald-500" size={32} /><p className="mt-4 font-bold text-stone-600">正在準備測驗...</p></div>;
     if (quizScore !== null) return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-6">
         <CheckCircle2 size={64} className="text-emerald-500" />
-        <h2 className="text-2xl font-bold">測驗完成！</h2>
+        <h2 className="text-2xl font-bold text-stone-800">測驗完成！</h2>
         <p className="text-stone-500">得分：{quizScore} / {currentQuiz.length}</p>
-        <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100">查看學習紀錄</button>
+        <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg">查看紀錄</button>
       </div>
     );
 
     if (currentQuiz.length === 0) return (
-      <div className="p-6 text-center space-y-6 flex flex-col justify-center h-full">
-        <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600"><BookOpen size={40} /></div>
-        <h3 className="text-xl font-bold text-stone-800">準備好挑戰了嗎？</h3>
-        <button onClick={() => handleStartQuiz()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 active:scale-95 transition-all">開始複習單字</button>
+      <div className="p-6 text-center flex flex-col justify-center h-full space-y-6">
+        <BookOpen size={64} className="mx-auto text-emerald-100" />
+        <h3 className="text-xl font-bold text-stone-800">準備好接受挑戰了嗎？</h3>
+        <button onClick={() => handleStartQuiz()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold">開始複習單字</button>
       </div>
     );
 
     const q = currentQuiz[quizIndex];
     return (
       <div className="flex flex-col h-full p-6 overflow-y-auto pb-28">
-        <h3 className="text-lg font-bold mb-4">{q.question}</h3>
+        <h3 className="text-lg font-bold mb-4 text-stone-800 leading-relaxed">{q.question}</h3>
         <div className="space-y-3">
           {q.options?.map((opt, i) => (
             <button key={i} onClick={() => handleAnswer(opt)} className={cn("w-full p-4 rounded-xl border text-left transition-all", showExplanation ? (opt === q.correct_answer ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" : opt === userAnswers[q.id] ? "bg-red-50 border-red-500 text-red-700" : "bg-white") : "bg-white hover:bg-emerald-50")}>{opt}</button>
@@ -281,7 +276,7 @@ export default function App() {
             {scannedWords.length === 0 && (
               <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 transition-all mt-8">
                 <Camera className="text-stone-300 mb-2" size={40} />
-                <p className="text-stone-500 font-medium">點擊選擇照片</p>
+                <p className="text-stone-500">點擊選擇照片</p>
               </div>
             )}
           </div>
@@ -303,7 +298,7 @@ export default function App() {
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
               <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">{type === 'qa' ? <MessageSquare size={32} /> : <BookOpen size={32} />}</div>
-              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '常見錯誤' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
+              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '單字辨析建議' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
             </div>
           )}
           {messages.map((msg) => (
@@ -325,7 +320,7 @@ export default function App() {
     );
   };
 
-  // ✨ 關鍵修正：學習足跡 (完整顯示例句、詞性與 ID 排序)
+  // ✨ 關鍵修正：學習足跡 (對齊資料庫欄位 並按照 ID 排序)
   const renderHistoryTab = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="p-6 border-b border-stone-100 bg-white sticky top-0 z-10">
@@ -341,19 +336,23 @@ export default function App() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] text-emerald-500 font-mono font-bold">#{item.id}</span>
                     <h3 className="text-lg font-bold text-stone-800">{item.word}</h3>
-                    {/* ✨ 使用 snake_case 抓取資料庫欄位 */}
                     <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded font-bold uppercase">{item.part_of_speech}</span>
                   </div>
                   <p className="text-[11px] text-stone-400 font-mono">{item.pronunciation}</p>
                 </div>
                 <button onClick={() => speak(item.word)} className="p-2 text-stone-300 hover:text-emerald-500 transition-colors"><Volume2 size={18} /></button>
               </div>
-              <p className="text-stone-700 font-medium mb-3">{item.meaning}</p>
+              <p className="text-stone-700 font-medium mb-2">{item.meaning}</p>
               
-              {/* ✨ 補回來的完整例句區塊 */}
+              {/* ✨ 型態顯示 */}
+              {item.forms && item.forms !== '無' && (
+                <p className="text-[10px] text-emerald-600 font-medium mb-3 bg-emerald-50 px-2 py-0.5 rounded-full w-fit">型態: {item.forms}</p>
+              )}
+
+              {/* ✨ 補回來的例句區塊 */}
               {item.example_en && (
                 <div className="mt-2 pt-2 border-t border-stone-50">
-                  <p className="text-xs text-stone-500 italic leading-relaxed">"{item.example_en}"</p>
+                  <p className="text-xs text-stone-600 italic leading-relaxed">"{item.example_en}"</p>
                   <p className="text-[10px] text-stone-400 mt-1">{item.example_tw}</p>
                 </div>
               )}
@@ -366,9 +365,9 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-stone-50 max-w-md mx-auto relative overflow-hidden shadow-2xl">
-      <header className="bg-white px-6 py-4 border-b border-stone-100 z-20 flex justify-between">
-        <h1 className="font-bold text-stone-800">English Tutor</h1>
-        <span className="text-[10px] text-emerald-500 font-bold">ONLINE</span>
+      <header className="bg-white px-6 py-4 border-b border-stone-100 z-20 flex justify-between items-center">
+        <h1 className="font-bold text-stone-800 tracking-tight">English Tutor</h1>
+        <span className="text-[10px] text-emerald-500 font-bold animate-pulse">ONLINE</span>
       </header>
 
       <main className="flex-1 overflow-hidden relative">
@@ -383,7 +382,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* ✨ 修改後的導覽列：辨識、文法、測驗、問答、紀錄 */}
+      {/* ✨ 修復後的順序：辨識、文法、測驗、問答、紀錄 */}
       <nav className="bg-white border-t border-stone-100 px-6 py-3 flex justify-between fixed bottom-0 w-full max-w-md z-40">
         <NavButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<Camera size={20} />} label="辨識" />
         <NavButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<BookOpen size={20} />} label="文法" />
