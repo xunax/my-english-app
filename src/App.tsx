@@ -37,7 +37,7 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// ✨ 修正介面：確保名稱跟資料庫回傳的一模一樣
+// ✨ 關鍵修正 1：確保欄位名稱與資料庫 (Snake Case) 完全對應
 interface WordAnalysis {
   word: string;
   pronunciation: string;
@@ -48,7 +48,7 @@ interface WordAnalysis {
   forms?: string;
 }
 
-// 1. 文法模式的核心劇本 (維持三階段教學)
+// ✨ 關鍵修正 2：保留你最想要的文法家教劇本
 const FINAL_GRAMMAR_PROMPT = `你是一位專業且幽默的 AI 英文文法家教。
 請依照以下兩種情境進行互動：
 
@@ -57,11 +57,11 @@ const FINAL_GRAMMAR_PROMPT = `你是一位專業且幽默的 AI 英文文法家�
 
 【情境 B：指定特定文法】
 警告：絕對不可以一次講完！請嚴格執行「由淺入深三階段教學」：
-- 第一階段（概念與公式）：解釋意義與公式，附上 2 個例句。出 1 題基礎測驗。
-- 第二階段（常見情境與關鍵字）：答對後，介紹情境與關鍵字。出 1 題練習題。
+- 第一階段（概念與公式）：解釋意義與公式，附上 2 個例句。出 1 題基礎測驗。(等待回答)
+- 第二階段（常見情境與關鍵字）：答對後，介紹情境與關鍵字。出 1 題練習題。(等待回答)
 - 第三階段（易錯點與大魔王比較）：過關後，抓出常犯錯誤，出 1 題挑戰題總結。
 
-若學生答錯，請耐心解釋並再出一題類似的。請全程用繁體中文 + 表情符號 ✨。`;
+若學生答錯，請耐心解釋並再出一題類似的。請全程用繁體中文。`;
 
 function QuickActionBtn({ onClick, label }: { onClick: () => void, label: string }) {
   return (
@@ -97,17 +97,18 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔄 修正：自動讀取資料庫歷史紀錄
+  // ✨ 關鍵修正 3：重新接回資料庫連線邏輯
   useEffect(() => {
     const loadSavedWords = async () => {
       try {
         const response = await fetch('/api/get-words');
         if (response.ok) {
           const data = await response.json();
+          // 將從 API 拿到的資料存入歷史紀錄狀態
           setHistory(data); 
         }
       } catch (error) {
-        console.error("讀取資料庫失敗：", error);
+        console.error("資料庫讀取失敗：", error);
       }
     };
     loadSavedWords();
@@ -219,31 +220,98 @@ export default function App() {
     }
   };
 
+  const renderQuizTab = () => {
+    if (isGeneratingQuiz) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full space-y-4 p-6 text-center">
+          <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
+          <h3 className="text-lg font-bold text-stone-800">正在出題中...</h3>
+        </div>
+      );
+    }
+
+    if (quizScore !== null) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-6">
+          <CheckCircle2 size={64} className="text-emerald-500" />
+          <div>
+            <h2 className="text-2xl font-bold text-stone-800">測驗完成！</h2>
+            <p className="text-stone-500">得分：{quizScore} / {currentQuiz.length}</p>
+          </div>
+          <button onClick={() => setActiveTab('history')} className="w-full py-3 bg-stone-100 text-stone-600 rounded-xl font-bold">返回紀錄</button>
+        </div>
+      );
+    }
+
+    if (currentQuiz.length === 0) {
+      return (
+        <div className="p-6 text-center space-y-6">
+          <BookOpen size={48} className="mx-auto text-emerald-200" />
+          <h3 className="text-xl font-bold">準備好測驗了嗎？</h3>
+          <button onClick={() => handleStartQuiz()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold">開始複習單字</button>
+        </div>
+      );
+    }
+
+    const q = currentQuiz[quizIndex];
+    const userAnswer = userAnswers[q.id];
+    const showExp = showExplanation;
+
+    return (
+      <div className="flex flex-col h-full p-6 overflow-y-auto pb-28">
+        <h3 className="text-lg font-bold mb-4">{q.question}</h3>
+        <div className="space-y-3">
+          {q.options?.map((opt, i) => (
+            <button
+              key={i}
+              onClick={() => handleAnswer(opt)}
+              disabled={showExp}
+              className={cn(
+                "w-full p-4 rounded-xl border text-left transition-all",
+                showExp 
+                  ? opt === q.correct_answer ? "bg-emerald-50 border-emerald-500 text-emerald-700" : opt === userAnswer ? "bg-red-50 border-red-500 text-red-700" : "bg-white border-stone-100 text-stone-400"
+                  : "bg-white border-stone-100 text-stone-700 active:bg-emerald-50"
+              )}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+        {showExp && (
+          <div className="mt-6 p-4 bg-stone-100 rounded-xl">
+            <p className="text-sm text-stone-600">{q.explanation}</p>
+            <button onClick={nextQuestion} className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold">下一題</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderScanTab = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="p-6 text-center border-b border-stone-50">
-        <h2 className="text-2xl font-bold text-stone-800 mb-1">跨頁單字辨識</h2>
-        <p className="text-stone-500 text-xs">上傳多張圖片，AI 將自動解析單字</p>
+        <h2 className="text-2xl font-bold text-stone-800">跨頁單字辨識</h2>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pb-20">
         {isAnalyzing ? (
-          <div className="flex flex-col items-center justify-center h-64 space-y-4"><Loader2 className="animate-spin text-emerald-500" size={32} /><p className="text-stone-400 text-sm">正在分析圖片...</p></div>
+          <div className="flex flex-col items-center justify-center h-64 space-y-4"><Loader2 className="animate-spin text-emerald-500" size={32} /><p className="text-stone-400 text-sm">正在辨識圖片...</p></div>
         ) : scannedWords.length > 0 ? (
           <div className="space-y-4 pt-4">
             {scannedWords.map((item, idx) => (
-              <div key={idx} className="bg-stone-50 rounded-2xl p-5 border border-stone-100">
+              <div key={idx} className="bg-stone-50 rounded-2xl p-5 border border-stone-100 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2"><h3 className="text-xl font-bold text-emerald-700">{item.word}</h3><button onClick={() => speak(item.word)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-full"><Volume2 size={14} /></button></div>
-                  <span className="px-2 py-1 bg-white text-stone-500 text-[10px] font-bold rounded uppercase border border-stone-100">{item.part_of_speech}</span>
+                  <h3 className="text-xl font-bold text-emerald-700">{item.word}</h3>
+                  <button onClick={() => speak(item.word)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-full"><Volume2 size={14} /></button>
                 </div>
                 <p className="text-stone-800 font-medium">{item.meaning}</p>
+                <span className="text-[10px] text-stone-400 font-bold uppercase">{item.part_of_speech}</span>
               </div>
             ))}
           </div>
         ) : (
           <div className="pt-8">
-            <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 hover:bg-emerald-50 transition-all group">
-              <Camera className="text-stone-300 group-hover:text-emerald-500 mb-2" size={40} />
+            <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 transition-all">
+              <Camera className="text-stone-300 mb-2" size={40} />
               <p className="text-stone-500 font-medium">點擊選擇照片</p>
             </div>
           </div>
@@ -257,22 +325,21 @@ export default function App() {
     const messages = type === 'qa' ? qaMessages : grammarMessages;
     return (
       <div className="flex flex-col h-full bg-white">
-        <div className="p-4 border-b border-stone-100 flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
+        <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-white sticky top-0 z-10">
           <h2 className="font-bold text-stone-800">{type === 'qa' ? 'AI 英文問答' : '文法學習區塊'}</h2>
           {messages.length > 0 && <button onClick={() => type === 'qa' ? setQaMessages([]) : setGrammarMessages([])} className="text-stone-300 hover:text-red-500"><X size={18} /></button>}
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
-                {type === 'qa' ? <MessageSquare size={32} /> : <BookOpen size={32} />}
-              </div>
-              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '單字辨析建議' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
+              <BookOpen size={48} className="text-emerald-100" />
+              <p className="text-stone-500 text-sm">{type === 'qa' ? '我有什麼能幫您的？' : '想學什麼文法？跟我說！'}</p>
+              <QuickActionBtn onClick={() => handleSendMessage(type, type === 'qa' ? '常見錯誤' : '我想學文法')} label={type === 'qa' ? '單字辨析建議' : '查看文法目錄'} />
             </div>
           )}
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex w-full", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[85%] rounded-2xl px-4 py-2 shadow-sm", msg.role === 'user' ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-800")}>
+              <div className={cn("max-w-[85%] rounded-2xl px-4 py-2", msg.role === 'user' ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-800")}>
                 <div className="markdown-body text-sm"><Markdown>{msg.text}</Markdown></div>
               </div>
             </div>
@@ -281,7 +348,7 @@ export default function App() {
         </div>
         <div className="p-4 border-t border-stone-100 fixed bottom-16 w-full max-w-md bg-white z-20">
           <div className="relative flex items-center">
-            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder="輸入問題..." className="w-full bg-stone-50 rounded-full py-3 pl-5 pr-12 text-sm outline-none" />
+            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder="輸入問題..." className="w-full bg-stone-50 rounded-full py-3 pl-5 pr-12 text-sm outline-none focus:ring-1 focus:ring-emerald-500" />
             <button onClick={() => handleSendMessage(type)} className="absolute right-2 p-2 bg-emerald-600 text-white rounded-full"><Send size={18} /></button>
           </div>
         </div>
@@ -289,7 +356,7 @@ export default function App() {
     );
   };
 
-  // 📝 修正後的歷史紀錄區塊：確保欄位對齊資料庫且可捲動
+  // ✨ 關鍵修正 4：修復後的歷史紀錄 Tab
   const renderHistoryTab = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="p-6 border-b border-stone-100 bg-white sticky top-0 z-10">
@@ -309,11 +376,9 @@ export default function App() {
                   <span className="text-[10px] text-stone-400 uppercase font-bold">{item.part_of_speech}</span>
                 </div>
                 <p className="text-sm text-stone-600 mt-0.5">{item.meaning}</p>
-                {item.example_en && (
-                  <p className="text-[10px] text-stone-400 mt-1 italic leading-tight">"{item.example_en}"</p>
-                )}
+                {item.example_en && <p className="text-[10px] text-stone-400 mt-1 italic leading-tight">"{item.example_en}"</p>}
               </div>
-              <button onClick={() => speak(item.word)} className="text-stone-300 hover:text-emerald-500 transition-colors ml-4"><Volume2 size={18} /></button>
+              <button onClick={() => speak(item.word)} className="text-stone-200 hover:text-emerald-500 transition-colors ml-4"><Volume2 size={18} /></button>
             </div>
           ))
         )}
@@ -328,7 +393,7 @@ export default function App() {
           <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-black italic">AI</div>
           <h1 className="font-bold text-stone-800 tracking-tight">English Tutor</h1>
         </div>
-        <span className="text-[10px] font-bold text-emerald-500 animate-pulse">ONLINE</span>
+        <span className="text-[10px] font-bold text-emerald-500">ONLINE</span>
       </header>
 
       <main className="flex-1 overflow-hidden relative">
@@ -338,7 +403,7 @@ export default function App() {
             {activeTab === 'grammar' && renderChatTab('grammar')}
             {activeTab === 'qa' && renderChatTab('qa')}
             {activeTab === 'history' && renderHistoryTab()}
-            {activeTab === 'quiz' && handleStartQuiz()} 
+            {activeTab === 'quiz' && renderQuizTab()}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -348,6 +413,7 @@ export default function App() {
         <NavButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<BookOpen size={20} />} label="文法" />
         <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="紀錄" />
         <NavButton active={activeTab === 'qa'} onClick={() => setActiveTab('qa')} icon={<MessageSquare size={20} />} label="問答" />
+        <NavButton active={activeTab === 'quiz'} onClick={() => setActiveTab('quiz')} icon={<CheckCircle2 size={20} />} label="測驗" />
       </nav>
     </div>
   );
@@ -355,7 +421,7 @@ export default function App() {
 
 function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
-    <button onClick={onClick} className={cn("flex flex-col items-center gap-1 transition-all", active ? "text-emerald-600 scale-105" : "text-stone-400")}>
+    <button onClick={onClick} className={cn("flex flex-col items-center gap-1 transition-all", active ? "text-emerald-600 scale-105" : "text-stone-400 hover:text-stone-600")}>
       {icon}
       <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
     </button>
