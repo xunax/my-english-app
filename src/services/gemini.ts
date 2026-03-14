@@ -102,55 +102,51 @@ export interface QuizQuestion {
 }
 
 export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        parts: [
-          {
-            text: `你是一位「極速英文家教」。只准輸出 JSON，不准有任何其他文字。
-            內容：${context}
+  const promptText = `你是一位「極速英文家教」。只准輸出 JSON，不准有任何其他文字。
+  內容：${context}
 
-            【極速測驗出題規則】：
-            1. 固定出 10 題。
-            2. 每題詳解 (exp) 必須控制在 20 個字以內。
-            3. 題型全部必須是「四選一選擇題」(multiple_choice)。
-            4. 嚴格輸出格式 (JSON)：
-            \`\`\`json
-            {
-              "quiz": [
-                {
-                  "q": "題目內容",
-                  "opt": ["選項1", "選項2", "選項3", "選項4"],
-                  "ans": "正確答案",
-                  "exp": "20字內詳解"
-                }
-              ]
-            }
-            \`\`\`
-            `,
-          },
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
+  【極速測驗出題規則】：
+  1. 固定出 10 題。
+  2. 每題詳解 (exp) 必須控制在 20 個字以內。
+  3. 題型全部必須是「四選一選擇題」。
+  4. 嚴格輸出格式 (絕對不要加上 markdown 標記)：
+  {
+    "quiz": [
+      {
+        "q": "題目內容",
+        "opt": ["選項1", "選項2", "選項3", "選項4"],
+        "ans": "正確答案",
+        "exp": "20字內詳解"
+      }
+    ]
+  }`;
 
   try {
-    const result = JSON.parse(response.text || "{}");
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: promptText, // 🚨 直接傳入純字串，避免 SDK 物件結構報錯
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    // 🚨 關鍵防呆：手動把 AI 可能亂加的 ```json 標籤拔掉
+    let rawText = response.text || "{}";
+    rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const result = JSON.parse(rawText);
     const list = result.quiz || [];
+    
     return list.map((item: any, index: number) => ({
       id: index + 1,
-      type: item.opt ? "multiple_choice" : "fill_in_the_blank",
+      type: "multiple_choice", // 既然強制選擇題，就直接鎖死這個類型
       question: item.q,
       options: item.opt,
       correct_answer: item.ans,
       explanation: item.exp
     }));
   } catch (e) {
-    console.error("Failed to parse Quiz JSON", e);
+    console.error("測驗 JSON 解析或生成失敗:", e);
     return [];
   }
 }
