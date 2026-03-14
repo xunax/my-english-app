@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -12,6 +12,7 @@ export interface WordAnalysis {
   example_tw: string;
 }
 
+// ✅ 辨識功能正常，原封不動保留
 export async function analyzeImages(base64Images: string[]): Promise<WordAnalysis[]> {
   const imageParts = base64Images.map(data => ({
     inlineData: {
@@ -64,7 +65,6 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
 
   const text = response.text || "";
   try {
-    // Extract JSON from markdown block
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
     const jsonStr = jsonMatch ? jsonMatch[1] : text;
     const result = JSON.parse(jsonStr.trim());
@@ -73,7 +73,6 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
     // --- 呼叫警衛室存單字 (開始) ---
     for (const item of words) {
       try {
-        // 把單字打包，發送 POST 請求給 Vercel 後端 API
         await fetch('/api/save-word', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -101,61 +100,77 @@ export interface QuizQuestion {
   explanation: string;
 }
 
+// 🚀 關鍵修復 1：地毯式清除 Markdown 標記，強制產生 10 題選擇題
 export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
-  const promptText = `你是一位「極速英文家教」。只准輸出 JSON，不准有任何其他文字。
+  const promptText = `你是一位「極速英文家教」。請嚴格根據以下內容出 10 題選擇題。
   內容：${context}
 
   【極速測驗出題規則】：
-  1. 固定出 10 題。
-  2. 每題詳解 (exp) 必須控制在 20 個字以內。
+  1. 必須出滿 10 題。
+  2. 每題詳解必須控制在 20 個字以內。
   3. 題型全部必須是「四選一選擇題」。
-  4. 嚴格輸出格式 (絕對不要加上 markdown 標記)：
-  {
-    "quiz": [
-      {
-        "q": "題目內容",
-        "opt": ["選項1", "選項2", "選項3", "選項4"],
-        "ans": "正確答案",
-        "exp": "20字內詳解"
-      }
-    ]
-  }`;
+  4. 絕對不能輸出 Markdown 標記 (不要有 \`\`\`json)，請直接輸出純 JSON 陣列。
+  
+  嚴格格式範例：
+  [
+    {
+      "q": "題目內容",
+      "opt": ["選項1", "選項2", "選項3", "選項4"],
+      "ans": "正確答案",
+      "exp": "20字內詳解"
+    }
+  ]`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: promptText,
+    config: {
+      responseMimeType: "application/json",
+    },
+  });
+
+  try {
+    // 暴力拔除 AI 亂加的標記
+    let rawText = response.text || "[]";
+    rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    const result = JSON.parse(rawText);
+    // 兼容陣列或物件包裝
+    const list = Array.isArray(result) ? result : (result.quiz || []);
+
+    return list.map((item: any, index: number) => ({
+      id: index + 1,
+      type: "multiple_choice",
+      question: item.q || item.question,
+      options: item.opt || item.options,
+      correct_answer: item.ans || item.answer || item.correct_answer,
+      explanation: item.exp || item.explanation
+    }));
+  } catch (e) {
+    console.error("Quiz JSON 解析失敗:", e, response.text);
+    throw new Error("JSON 格式錯誤");
+  }
+}
+
+// 🚀 關鍵修復 2：捨棄會當機的 chats.create，改用最穩定的手動歷史對接
+export async function chatWithAI(message: string, history: { role: "user" | "model"; text: string }[]) {
+  // 過濾掉空訊息，避免 SDK 報 ContentUnion 錯誤
+  const safeContents = history
+    .filter(h => h.text && h.text.trim() !== '')
+    .map(h => ({
+      role: h.role,
+      parts: [{ text: h.text }]
+    }));
+
+  // 加上最新一句使用者的話
+  safeContents.push({ role: "user", parts: [{ text: message }] });
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: promptText, // 🚨 直接傳入純字串，避免 SDK 物件結構報錯
+      contents: safeContents,
       config: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    // 🚨 關鍵防呆：手動把 AI 可能亂加的 ```json 標籤拔掉
-    let rawText = response.text || "{}";
-    rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    const result = JSON.parse(rawText);
-    const list = result.quiz || [];
-    
-    return list.map((item: any, index: number) => ({
-      id: index + 1,
-      type: "multiple_choice", // 既然強制選擇題，就直接鎖死這個類型
-      question: item.q,
-      options: item.opt,
-      correct_answer: item.ans,
-      explanation: item.exp
-    }));
-  } catch (e) {
-    console.error("測驗 JSON 解析或生成失敗:", e);
-    return [];
-  }
-}
-
-export async function chatWithAI(message: string, history: { role: "user" | "model"; text: string }[]) {
-  const chat = ai.chats.create({
-    model:"gemini-2.5-flash",
-    config: {
-      systemInstruction: `你是一位專為台灣使用者打造的「全能 AI 英文學習助手」。你的語氣鼓勵、有耐心且專業。
+        systemInstruction: `你是一位專為台灣使用者打造的「全能 AI 英文學習助手」。你的語氣鼓勵、有耐心且專業。
 
       【文法學習區塊 (Interactive Grammar Learning) 規則】：
       
@@ -177,14 +192,13 @@ export async function chatWithAI(message: string, history: { role: "user" | "mod
       【通用規範】：
       - 如果使用者答錯，請耐心解釋為什麼錯，並再出一題類似的題目讓他確認自己真的學會了。
       - 所有對話請使用「繁體中文 (zh-TW)」。
-      - 版面保持整潔，適當使用 Markdown 格式（粗體、條列式）。`,
-    },
-    history: history.map(h => ({
-      role: h.role,
-      parts: [{ text: h.text }]
-    }))
-  });
+      - 版面保持整潔，適當使用 Markdown 格式（粗體、條列式）。`
+      }
+    });
 
-  const response = await chat.sendMessage(message);
-  return response.text;
+    return response.text;
+  } catch (error: any) {
+    console.error("Chat API 崩潰:", error);
+    throw new Error(error.message); // 拋出給 App.tsx 顯示
+  }
 }
