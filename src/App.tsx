@@ -79,6 +79,7 @@ export default function App() {
   const [showExplanation, setShowExplanation] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
 
+  // 🔄 讀取資料庫
   useEffect(() => {
     const loadSavedWords = async () => {
       try {
@@ -100,12 +101,6 @@ export default function App() {
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
-    if (textToSend.includes('測驗') || textToSend.includes('練習')) {
-      handleStartQuiz(textToSend);
-      setInputValue('');
-      return;
-    }
-
     const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: textToSend, timestamp: Date.now() };
     if (type === 'qa') setQaMessages(prev => [...prev, userMsg]);
     else setGrammarMessages(prev => [...prev, userMsg]);
@@ -123,7 +118,8 @@ export default function App() {
     } catch (error) { console.error(error); } finally { setIsTyping(false); }
   };
 
-  const handleStartQuiz = async (context?: string) => {
+  // ✨ 核心修正：強制十題選擇題的產出邏輯
+  const handleStartQuiz = async () => {
     setIsGeneratingQuiz(true);
     setActiveTab('quiz');
     setCurrentQuiz([]);
@@ -132,33 +128,65 @@ export default function App() {
     setShowExplanation(false);
     setQuizScore(null);
     try {
-      const quizContext = context || (history.length > 0 ? `複習：${history.map(w => w.word).join(', ')}` : "基礎文法題");
-      const quiz = await generateQuiz(quizContext);
-      if (quiz && quiz.length > 0) setCurrentQuiz(quiz);
-    } catch (error) { console.error(error); } finally { setIsGeneratingQuiz(false); }
+      // 構建強力的提示詞，要求 10 題選擇題
+      const wordList = history.length > 0 ? history.map(w => w.word).join(', ') : "基礎常用單字";
+      const quizPrompt = `請針對以下單字範圍出題：${wordList}。
+      規則：
+      1. 必須出滿 10 題。
+      2. 全部題型必須是「四選一選擇題」。
+      3. 題目必須包含：單字意義、詞性用法或填空。
+      4. 請用繁體中文提供解析。`;
+
+      const quiz = await generateQuiz(quizPrompt);
+      if (quiz && Array.isArray(quiz) && quiz.length > 0) {
+        // 截取前 10 題，確保數量正確
+        setCurrentQuiz(quiz.slice(0, 10));
+      }
+    } catch (error) { 
+      console.error("產生測驗失敗：", error); 
+    } finally { 
+      setIsGeneratingQuiz(false); 
+    }
   };
 
   const renderQuizTab = () => {
-    if (isGeneratingQuiz) return <div className="flex flex-col items-center justify-center h-full p-6"><Loader2 className="animate-spin text-emerald-500 mb-4" size={40} /><p className="font-bold text-stone-500">正在出題...</p></div>;
+    if (isGeneratingQuiz) return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-4">
+        <Loader2 className="animate-spin text-emerald-500" size={48} />
+        <p className="font-bold text-stone-600 text-lg">正在挑選 10 題精選題目...</p>
+      </div>
+    );
+
     if (quizScore !== null) return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-6">
         <CheckCircle2 size={80} className="text-emerald-500" />
         <h2 className="text-2xl font-bold">測驗完成！</h2>
-        <p className="text-stone-500">得分：<span className="text-emerald-600 font-bold text-2xl">{quizScore} / {currentQuiz.length}</span></p>
-        <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg">查看單字足跡</button>
+        <div className="bg-emerald-50 px-8 py-4 rounded-3xl">
+          <p className="text-stone-500 text-sm mb-1 uppercase font-bold tracking-widest">最終得分</p>
+          <span className="text-emerald-600 font-bold text-4xl">{quizScore} / {currentQuiz.length}</span>
+        </div>
+        <div className="w-full space-y-3">
+          <button onClick={handleStartQuiz} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all">再挑戰一次</button>
+          <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-stone-100 text-stone-600 rounded-2xl font-bold">返回紀錄</button>
+        </div>
       </div>
     );
 
     if (currentQuiz.length === 0) return (
-      <div className="p-6 flex flex-col justify-center h-full space-y-8">
+      <div className="p-6 flex flex-col justify-center h-full space-y-10">
         <div className="text-center space-y-4">
-          <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600"><CheckCircle2 size={40} /></div>
-          <h3 className="text-xl font-bold">準備好挑戰了嗎？</h3>
+          <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+            <BookOpen size={48} />
+          </div>
+          <h3 className="text-2xl font-bold text-stone-800">準備好挑戰了嗎？</h3>
+          <p className="text-stone-400">系統將根據你的學習足跡產生 10 題選擇題</p>
         </div>
-        <div className="space-y-3">
-          <button onClick={() => handleStartQuiz()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold">開始單字複習測驗</button>
-          <button onClick={() => handleStartQuiz("基礎時態測驗")} className="w-full py-4 bg-white border border-stone-100 text-stone-600 rounded-2xl font-bold">基礎文法測驗</button>
-        </div>
+        <button 
+          onClick={handleStartQuiz} 
+          className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-bold text-lg shadow-xl shadow-emerald-100 active:scale-95 transition-all"
+        >
+          開始複習測驗 (10題)
+        </button>
       </div>
     );
 
@@ -171,30 +199,68 @@ export default function App() {
 
     return (
       <div className="flex flex-col h-full p-6 overflow-y-auto pb-28">
-        <div className="flex justify-between items-center mb-6"><span className="text-xs font-bold text-stone-400">問題 {quizIndex + 1} / {currentQuiz.length}</span></div>
+        <div className="flex justify-between items-center mb-6">
+          <span className="text-xs font-bold text-stone-400 bg-stone-100 px-2 py-1 rounded">QUESTION {quizIndex + 1} / {currentQuiz.length}</span>
+          <div className="flex gap-1">
+            {currentQuiz.map((_, i) => (
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full transition-all", i === quizIndex ? "bg-emerald-500 w-4" : i < quizIndex ? "bg-emerald-200" : "bg-stone-200")} />
+            ))}
+          </div>
+        </div>
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100 mb-6">
           <h3 className="text-lg font-bold text-stone-800 leading-relaxed">{q.question}</h3>
         </div>
         <div className="space-y-3">
           {q.options?.map((opt, i) => (
-            <button key={i} onClick={() => handleAnswer(opt)} className={cn("w-full p-4 rounded-xl border text-left transition-all", showExplanation ? (opt === q.correct_answer ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" : opt === userAnswers[q.id] ? "bg-red-50 border-red-500 text-red-700" : "bg-white text-stone-300") : "bg-white hover:bg-emerald-50")}>{opt}</button>
+            <button 
+              key={i} 
+              onClick={() => handleAnswer(opt)} 
+              className={cn(
+                "w-full p-4 rounded-xl border text-left transition-all relative overflow-hidden",
+                showExplanation 
+                  ? (opt === q.correct_answer 
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" 
+                      : opt === userAnswers[q.id] 
+                        ? "bg-red-50 border-red-500 text-red-700" 
+                        : "bg-white text-stone-300 border-stone-100") 
+                  : "bg-white border-stone-100 hover:bg-stone-50 text-stone-700"
+              )}
+            >
+              <div className="flex justify-between items-center">
+                <span>{opt}</span>
+                {showExplanation && opt === q.correct_answer && <CheckCircle2 size={18} className="text-emerald-500" />}
+              </div>
+            </button>
           ))}
-          {!q.options && !showExplanation && (
-            <div className="space-y-4"><input type="text" placeholder="輸入答案..." className="w-full p-4 rounded-xl border border-stone-100 outline-none focus:ring-2 focus:ring-emerald-500/20" onKeyDown={(e) => e.key === 'Enter' && handleAnswer((e.target as HTMLInputElement).value)} /><button onClick={() => handleAnswer((document.querySelector('input') as HTMLInputElement).value)} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold">送出答案</button></div>
-          )}
         </div>
         {showExplanation && (
-          <div className="mt-6 p-5 bg-stone-100 rounded-2xl">
-            <h4 className="font-bold text-stone-800 mb-2 flex items-center gap-2"><HelpCircle size={16} /> 解析</h4>
-            <p className="text-sm text-stone-600 leading-relaxed">{q.explanation}</p>
-            <button onClick={() => quizIndex < currentQuiz.length - 1 ? (setQuizIndex(prev => prev + 1), setShowExplanation(false)) : setQuizScore(currentQuiz.reduce((acc, curr) => acc + (userAnswers[curr.id] === curr.correct_answer ? 1 : 0), 0))} className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold">{quizIndex < currentQuiz.length - 1 ? '下一題' : '查看結果'}</button>
-          </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6 space-y-4">
+            <div className="p-5 bg-stone-100 rounded-2xl border border-stone-200">
+              <h4 className="font-bold text-stone-800 mb-2 flex items-center gap-2 text-sm"><HelpCircle size={16} className="text-emerald-500" /> 題目解析</h4>
+              <p className="text-sm text-stone-600 leading-relaxed">{q.explanation}</p>
+            </div>
+            <button 
+              onClick={() => {
+                if (quizIndex < currentQuiz.length - 1) {
+                  setQuizIndex(prev => prev + 1);
+                  setShowExplanation(false);
+                } else {
+                  const score = currentQuiz.reduce((acc, curr) => acc + (userAnswers[curr.id] === curr.correct_answer ? 1 : 0), 0);
+                  setQuizScore(score);
+                }
+              }} 
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg"
+            >
+              {quizIndex < currentQuiz.length - 1 ? '下一題' : '查看總結報告'}
+              <ChevronRight size={18} />
+            </button>
+          </motion.div>
         )}
       </div>
     );
   };
 
-  // ✨ 關鍵修正：區分問答與文法
+  // ✨ 維持問答介面的正確性
   const renderChatTab = (type: 'qa' | 'grammar') => {
     const messages = type === 'qa' ? qaMessages : grammarMessages;
     const isQA = type === 'qa';
@@ -207,15 +273,20 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">{isQA ? <MessageSquare size={32} /> : <BookOpen size={32} />}</div>
-              <p className="text-stone-500 text-sm">{isQA ? '對英文用法有疑問嗎？儘管問我！' : '輸入文法主題，即刻開始教學！'}</p>
-              <QuickActionBtn onClick={() => handleSendMessage(type, isQA ? '我想了解常見錯誤' : '我想學文法')} label={isQA ? '常用口語建議' : '查看文法目錄'} />
+              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 shadow-sm">{isQA ? <MessageSquare size={32} /> : <BookOpen size={32} />}</div>
+              <div>
+                <h4 className="font-bold text-stone-800 mb-1">{isQA ? '有任何英文問題嗎？' : '想學文法嗎？'}</h4>
+                <p className="text-stone-400 text-xs px-10">{isQA ? '輸入想問的內容，我會為你詳細解答！' : '請輸入你想學習的主題，例如「現在完成式」。'}</p>
+              </div>
+              <div className="w-full px-8">
+                <QuickActionBtn onClick={() => handleSendMessage(type, isQA ? '我想了解常見英文錯誤' : '我想從頭學文法')} label={isQA ? '看看常見錯誤分析' : '查看文法主題清單'} />
+              </div>
             </div>
           )}
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex w-full", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[85%] rounded-2xl px-4 py-2", msg.role === 'user' ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-800")}>
-                <div className="markdown-body text-sm"><Markdown>{msg.text}</Markdown></div>
+              <div className={cn("max-w-[85%] rounded-2xl px-4 py-3 shadow-sm", msg.role === 'user' ? "bg-emerald-600 text-white" : "bg-stone-50 text-stone-800 border border-stone-100")}>
+                <div className="markdown-body text-sm leading-relaxed"><Markdown>{msg.text}</Markdown></div>
               </div>
             </div>
           ))}
@@ -223,8 +294,8 @@ export default function App() {
         </div>
         <div className="p-4 border-t border-stone-100 fixed bottom-16 w-full max-w-md bg-white z-20">
           <div className="relative flex items-center">
-            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder={isQA ? "問點什麼吧..." : "輸入主題..."} className="w-full bg-stone-50 rounded-full py-3 pl-5 pr-12 text-sm outline-none focus:ring-1 focus:ring-emerald-500" />
-            <button onClick={() => handleSendMessage(type)} className="absolute right-2 p-2 bg-emerald-600 text-white rounded-full"><Send size={18} /></button>
+            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder={isQA ? "請輸入您的英文問題..." : "例如：現在完成式"} className="w-full bg-stone-50 border border-stone-100 rounded-full py-3.5 pl-6 pr-14 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all" />
+            <button onClick={() => handleSendMessage(type)} className="absolute right-2 p-2 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-colors"><Send size={18} /></button>
           </div>
         </div>
       </div>
@@ -233,7 +304,10 @@ export default function App() {
 
   const renderHistoryTab = () => (
     <div className="flex flex-col h-full bg-white">
-      <div className="p-6 border-b border-stone-100 bg-white sticky top-0 z-10"><h2 className="text-xl font-bold text-stone-800">學習足跡</h2><p className="text-xs text-stone-500">共錄入 {history.length} 個單字</p></div>
+      <div className="p-6 border-b border-stone-100 bg-white sticky top-0 z-10">
+        <h2 className="text-xl font-bold text-stone-800">學習足跡</h2>
+        <p className="text-xs text-stone-500">已錄入 {history.length} 個單字，將用於產生測驗題目</p>
+      </div>
       <div className="flex-1 overflow-y-auto px-6 pt-4 pb-32 space-y-6">
         {history.length === 0 ? <div className="flex flex-col items-center justify-center h-64 opacity-20"><History size={48} /><p className="font-bold mt-2">尚無紀錄</p></div> : (
           history.map((item, idx) => (
@@ -266,7 +340,11 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-stone-50 max-w-md mx-auto relative overflow-hidden shadow-2xl">
-      <header className="bg-white px-6 py-4 border-b border-stone-100 z-20 flex justify-between items-center"><h1 className="font-bold text-stone-800 tracking-tight">English Tutor</h1><span className="text-[10px] text-emerald-500 font-bold tracking-widest">ONLINE</span></header>
+      <header className="bg-white px-6 py-4 border-b border-stone-100 z-20 flex justify-between items-center shadow-sm">
+        <h1 className="font-bold text-stone-800 tracking-tight">English Tutor</h1>
+        <span className="text-[10px] text-emerald-500 font-bold tracking-widest flex items-center gap-1"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />ONLINE</span>
+      </header>
+
       <main className="flex-1 overflow-hidden relative">
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
@@ -277,7 +355,7 @@ export default function App() {
                   {isAnalyzing ? <div className="flex flex-col items-center justify-center h-64"><Loader2 className="animate-spin text-emerald-500" size={32} /></div> : (
                     <div className="space-y-4">
                       {scannedWords.map((w, i) => (<div key={i} className="bg-stone-50 rounded-2xl p-5 border border-stone-100"><h3 className="text-xl font-bold text-emerald-700">{w.word}</h3><p className="text-stone-800">{w.meaning}</p></div>))}
-                      {scannedWords.length === 0 && <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 transition-all mt-8"><Camera className="text-stone-300 mb-2" size={40} /><p className="text-stone-500">點擊上傳照片</p></div>}
+                      {scannedWords.length === 0 && <div onClick={() => fileInputRef.current?.click()} className="h-48 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-300 transition-all mt-8"><Camera className="text-stone-300 mb-2" size={40} /><p className="text-stone-500 font-medium">點擊上傳照片</p></div>}
                     </div>
                   )}
                 </div>
@@ -296,12 +374,13 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
-      <nav className="bg-white border-t border-stone-100 px-6 py-3 flex justify-between fixed bottom-0 w-full max-w-md z-40">
-        <NavButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<Camera size={20} />} label="辨識" />
-        <NavButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<BookOpen size={20} />} label="文法" />
-        <NavButton active={activeTab === 'quiz'} onClick={() => setActiveTab('quiz')} icon={<CheckCircle2 size={20} />} label="測驗" />
-        <NavButton active={activeTab === 'qa'} onClick={() => setActiveTab('qa')} icon={<MessageSquare size={20} />} label="問答" />
-        <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={20} />} label="紀錄" />
+
+      <nav className="bg-white border-t border-stone-100 px-6 py-3 flex justify-between fixed bottom-0 w-full max-w-md z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+        <NavButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<Camera size={22} />} label="辨識" />
+        <NavButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<BookOpen size={22} />} label="文法" />
+        <NavButton active={activeTab === 'quiz'} onClick={() => setActiveTab('quiz')} icon={<CheckCircle2 size={22} />} label="測驗" />
+        <NavButton active={activeTab === 'qa'} onClick={() => setActiveTab('qa')} icon={<MessageSquare size={22} />} label="問答" />
+        <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={22} />} label="紀錄" />
       </nav>
     </div>
   );
@@ -309,7 +388,7 @@ export default function App() {
 
 function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
-    <button onClick={onClick} className={cn("flex flex-col items-center gap-1 transition-all", active ? "text-emerald-600 scale-105" : "text-stone-400 hover:text-stone-600")}>
+    <button onClick={onClick} className={cn("flex flex-col items-center gap-1 transition-all", active ? "text-emerald-600 scale-110" : "text-stone-300 hover:text-stone-500")}>
       {icon}
       <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
     </button>
