@@ -112,9 +112,9 @@ export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
             內容：${context}
 
             【極速測驗出題規則】：
-            1. 固定只出 3 題。
+            1. 固定出 10 題。
             2. 每題詳解 (exp) 必須控制在 20 個字以內。
-            3. 題型隨機混合：選擇題、填空題、除錯題。
+            3. 題型全部必須是「四選一選擇題」(multiple_choice)。
             4. 嚴格輸出格式 (JSON)：
             \`\`\`json
             {
@@ -189,6 +189,6 @@ export async function chatWithAI(message: string, history: { role: "user" | "mod
     }))
   });
 
-  const response = await chat.sendMessage({ message });
+  const response = await chat.sendMessage(message);
   return response.text;
 }
