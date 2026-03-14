@@ -73,7 +73,7 @@ export default function App() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [qaMessages, grammarMessages, isTyping]);
 
-  const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
     if (isTyping) return;
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
@@ -89,15 +89,31 @@ export default function App() {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       const chatHistory = messages.map(m => ({ role: m.role, text: m.text }));
       const response = await chatWithAI(textToSend, chatHistory); 
+
       const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response || '請再試一次。', timestamp: Date.now() };
       
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
     } catch (error: any) {
-      const errorMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: `⚠️ 發生錯誤：${error.message}`, timestamp: Date.now() };
+      // ✨ 核心修正：攔截 Quota exceeded 並翻譯成中文
+      let friendlyMessage = error.message || "連線發生錯誤";
+      
+      if (friendlyMessage.includes("429") || friendlyMessage.includes("quota") || friendlyMessage.includes("RESOURCE_EXHAUSTED")) {
+        friendlyMessage = "老師目前太受歡迎啦！免費額度已暫時用完，請等一分鐘或明天再來找我喔！✨";
+      }
+
+      const errorMsg: ChatMessage = { 
+        id: Date.now().toString(), 
+        role: 'model', 
+        text: `⚠️ ${friendlyMessage}`, 
+        timestamp: Date.now() 
+      };
+      
       if (type === 'qa') setQaMessages(prev => [...prev, errorMsg]);
       else setGrammarMessages(prev => [...prev, errorMsg]);
-    } finally { setIsTyping(false); }
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
