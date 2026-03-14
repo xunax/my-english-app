@@ -12,7 +12,6 @@ export interface WordAnalysis {
   example_tw: string;
 }
 
-// 🚀 升級版辨識：強制 JSON 輸出，拒絕任何廢話前言
 export async function analyzeImages(base64Images: string[]): Promise<WordAnalysis[]> {
   const imageParts = base64Images.map(data => ({
     inlineData: {
@@ -21,60 +20,58 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
     },
   }));
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        parts: [
-          ...imageParts,
-          {
-            text: `你是一位專業的英文老師。請辨識這幾張圖片（可能是跨頁內容）中的英文單字。
-            請嚴格依照以下步驟執行：
-
-            1. 盤點與去重：合併所有圖片中的英文單字，去除重複。
-            2. 詳細解析：針對找出的單字，給出發音(KK音標)、詞性、中文意義、型態變化、以及一句實用例句(附中文)。
-               - 動詞：三態 (若相同則給V-ing/V-s)
-               - 名詞：複數
-               - 形容詞/副詞：比較級/最高級
-               - 無特殊變化填「無」
-
-            【絕對嚴格限制】：
-            1. 絕對不准輸出 Markdown 標記 (如 \`\`\`json)。
-            2. 絕對不准說「已為您解析完畢」等任何廢話。
-            3. 只能輸出純 JSON 格式。
-
-            請確保格式如下：
-            {
-              "vocabulary_list": [
-                {
-                  "word": "accommodate",
-                  "pronunciation": "[əˋkɑmə͵det]",
-                  "part_of_speech": "v.",
-                  "meaning": "容納；為...提供住宿",
-                  "forms": "accommodated, accommodating",
-                  "example_en": "The hotel can accommodate up to 500 guests.",
-                  "example_tw": "這家飯店最多可容納 500 位客人。"
-                }
-              ]
-            }`,
-          },
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json", // 強制鎖死 JSON 模式
-    }
-  });
-
   try {
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: [
+        {
+          parts: [
+            ...imageParts,
+            {
+              text: `你是一位專業的英文老師。請辨識這幾張圖片（可能是跨頁內容）中的英文單字。
+              請嚴格依照以下步驟執行：
+
+              1. 盤點與去重：合併所有圖片中的英文單字，去除重複。
+              2. 詳細解析：針對找出的單字，給出發音(KK音標)、詞性、中文意義、型態變化、以及一句實用例句(附中文)。
+                 - 動詞：三態 (若相同則給V-ing/V-s)
+                 - 名詞：複數
+                 - 形容詞/副詞：比較級/最高級
+                 - 無特殊變化填「無」
+
+              【絕對嚴格限制】：
+              1. 絕對不准輸出 Markdown 標記 (如 \`\`\`json)。
+              2. 絕對不准說「已為您解析完畢」等任何廢話。
+              3. 只能輸出純 JSON 格式。
+
+              請確保格式如下：
+              {
+                "vocabulary_list": [
+                  {
+                    "word": "accommodate",
+                    "pronunciation": "[əˋkɑmə͵det]",
+                    "part_of_speech": "v.",
+                    "meaning": "容納；為...提供住宿",
+                    "forms": "accommodated, accommodating",
+                    "example_en": "The hotel can accommodate up to 500 guests.",
+                    "example_tw": "這家飯店最多可容納 500 位客人。"
+                  }
+                ]
+              }`,
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
     let rawText = response.text || "{}";
-    // 暴力拔除可能出現的標記
     rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
     
     const result = JSON.parse(rawText);
     const words = result.vocabulary_list || [];
 
-    // --- 存入資料庫 ---
     for (const item of words) {
       try {
         await fetch('/api/save-word', {
@@ -88,8 +85,13 @@ export async function analyzeImages(base64Images: string[]): Promise<WordAnalysi
     }
 
     return words;
-  } catch (e) {
-    console.error("解析圖片單字 JSON 失敗:", e, response.text);
+  } catch (error: any) {
+    console.error("解析圖片單字 JSON 失敗:", error);
+    const errMsg = error.message || String(error);
+    // 💡 溫柔翻譯機：影像辨識額度用光時的提示
+    if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("掃描功能目前太熱門啦！API 免費額度已暫時用完，請稍等幾分鐘或明天再試喔！");
+    }
     throw new Error("單字解析失敗，請確認圖片清晰度或再試一次。");
   }
 }
@@ -123,15 +125,15 @@ export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
     }
   ]`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: promptText,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
   try {
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: promptText,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
     let rawText = response.text || "[]";
     rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
     const result = JSON.parse(rawText);
@@ -145,9 +147,14 @@ export async function generateQuiz(context: string): Promise<QuizQuestion[]> {
       correct_answer: item.ans || item.answer || item.correct_answer,
       explanation: item.exp || item.explanation
     }));
-  } catch (e) {
-    console.error("Quiz JSON 解析失敗:", e, response.text);
-    throw new Error("測驗產生失敗");
+  } catch (error: any) {
+    console.error("Quiz JSON 解析失敗:", error);
+    const errMsg = error.message || String(error);
+    // 💡 溫柔翻譯機：出題額度用光時的提示
+    if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("老師目前太忙碌啦！免費出題額度已暫時用盡，請稍後再試！");
+    }
+    throw new Error("測驗產生失敗，請再試一次。");
   }
 }
 
@@ -163,7 +170,7 @@ export async function chatWithAI(message: string, history: { role: "user" | "mod
       : String(message);
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: finalPrompt,
       config: {
         systemInstruction: `你是一位專為台灣使用者打造的「全能 AI 英文學習助手」。你的語氣鼓勵、有耐心且專業。
@@ -194,6 +201,11 @@ export async function chatWithAI(message: string, history: { role: "user" | "mod
     return response.text;
   } catch (error: any) {
     console.error("Chat API 崩潰:", error);
-    throw new Error(error.message);
+    const errMsg = error.message || String(error);
+    // 💡 溫柔翻譯機：聊天額度用光時的提示
+    if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("老師目前被問爆啦！API 免費額度已暫時用盡，請稍等幾分鐘或明天再來找我喔！");
+    }
+    throw new Error("連線發生了一點小問題，請再試一次。");
   }
 }
