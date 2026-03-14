@@ -14,8 +14,7 @@ import {
   Volume2, 
   Loader2, 
   ChevronRight,
-  CheckCircle2,
-  HelpCircle
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeImages, chatWithAI, generateQuiz, WordAnalysis, QuizQuestion } from './services/gemini';
@@ -50,11 +49,12 @@ interface WordAnalysis {
   forms?: string;
 }
 
-function QuickActionBtn({ onClick, label }: { onClick: () => void, label: string }) {
+function QuickActionBtn({ onClick, label, disabled }: { onClick: () => void, label: string, disabled?: boolean }) {
   return (
     <button 
       onClick={onClick}
-      className="w-full py-3 px-4 bg-stone-50 text-stone-600 text-sm font-medium rounded-xl border border-stone-100 hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left flex items-center justify-between group mb-3"
+      disabled={disabled}
+      className={cn("w-full py-3 px-4 bg-stone-50 text-stone-600 text-sm font-medium rounded-xl border border-stone-100 transition-all text-left flex items-center justify-between group mb-3", disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-emerald-50 hover:text-emerald-700")}
     >
       <div className="flex items-center gap-2">
         <span className="text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity text-base">✨</span>
@@ -108,6 +108,7 @@ export default function App() {
   }, [qaMessages, grammarMessages, isTyping]);
 
   const handleSendMessage = async (type: 'qa' | 'grammar', overrideValue?: string) => {
+    if (isTyping) return; // 🚨 防呆：避免連續點擊造成 API 崩潰
     const textToSend = overrideValue || inputValue;
     if (!textToSend.trim()) return;
 
@@ -123,14 +124,12 @@ export default function App() {
       const chatHistory = messages.map(m => ({ role: m.role, text: m.text }));
       const response = await chatWithAI(textToSend, chatHistory); 
       
-      const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response || '連線有點問題，請再試一次。', timestamp: Date.now() };
+      const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response || '請再試一次。', timestamp: Date.now() };
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
-
     } catch (error: any) {
-      // ✨ 關鍵防護：如果 gemini.ts 報錯，會直接顯示在畫面上，不再白屏死機！
       console.error(error);
-      const errorMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: `⚠️ 老師發生錯誤：${error.message} \n\n請檢查 gemini.ts 的設定！`, timestamp: Date.now() };
+      const errorMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: `⚠️ 發生錯誤：${error.message}`, timestamp: Date.now() };
       if (type === 'qa') setQaMessages(prev => [...prev, errorMsg]);
       else setGrammarMessages(prev => [...prev, errorMsg]);
     } finally {
@@ -165,6 +164,7 @@ export default function App() {
   };
 
   const handleStartQuiz = async () => {
+    if (isGeneratingQuiz) return;
     setIsGeneratingQuiz(true);
     setActiveTab('quiz');
     setCurrentQuiz([]);
@@ -173,18 +173,16 @@ export default function App() {
     setShowExplanation(false);
     setQuizScore(null);
     try {
-      // ✨ 單純傳遞單字給 gemini.ts，由 gemini.ts 決定要出 10 題選擇題
       const wordList = history.length > 0 ? history.map(w => w.word).join(', ') : "基礎常用單字";
       const quiz = await generateQuiz(wordList);
-      
       if (quiz && Array.isArray(quiz) && quiz.length > 0) {
         setCurrentQuiz(quiz); 
       } else {
-        alert("測驗產生失敗，請檢查 gemini.ts 回傳的 JSON 格式是否有誤。");
+        alert("測驗產生失敗，請檢查 gemini.ts 或 API 設定。");
       }
     } catch (error) {
       console.error("產生測驗失敗：", error);
-      alert("網路連線或出題過程發生錯誤！");
+      alert("網路連線或出題發生錯誤！");
     } finally {
       setIsGeneratingQuiz(false);
     }
@@ -200,7 +198,7 @@ export default function App() {
     if (isGeneratingQuiz) return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-4">
         <Loader2 className="animate-spin text-emerald-500" size={48} />
-        <p className="font-bold text-stone-600 text-lg">正在為您準備選擇題測驗...</p>
+        <p className="font-bold text-stone-600 text-lg">正在為您準備 10 題選擇題...</p>
       </div>
     );
 
@@ -226,7 +224,7 @@ export default function App() {
             <BookOpen size={48} />
           </div>
           <h3 className="text-2xl font-bold text-stone-800">準備好挑戰了嗎？</h3>
-          <p className="text-stone-500">系統將根據學習足跡為您出題。</p>
+          <p className="text-stone-500">系統將根據你的學習足跡，產生 10 題選擇題。</p>
         </div>
         <button onClick={handleStartQuiz} className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-bold text-lg shadow-xl shadow-emerald-100 transition-all active:scale-95">
           開始複習測驗
@@ -282,7 +280,7 @@ export default function App() {
         {showExplanation && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6 space-y-4">
             <div className="p-5 bg-stone-100 rounded-2xl border border-stone-200">
-              <h4 className="font-bold text-stone-800 mb-2 flex items-center gap-2 text-sm"><HelpCircle size={18} className="text-emerald-600" /> 題目解析</h4>
+              <h4 className="font-bold text-stone-800 mb-2 flex items-center gap-2 text-sm"><BookOpen size={18} className="text-emerald-600" /> 題目解析</h4>
               <p className="text-sm text-stone-600 leading-relaxed">{q.explanation}</p>
             </div>
             <button 
@@ -354,12 +352,12 @@ export default function App() {
               <div className="w-full px-6">
                 {isQA ? (
                   <>
-                    <QuickActionBtn onClick={() => handleSendMessage('qa', '如何分辨 make 和 do 的用法？')} label="分辨 make 和 do 的用法" />
-                    <QuickActionBtn onClick={() => handleSendMessage('qa', '幫我解釋「Take it easy」是什麼意思？')} label="解釋 Take it easy" />
-                    <QuickActionBtn onClick={() => handleSendMessage('qa', '如何寫一封正式的英文請假郵件？')} label="寫英文請假郵件" />
+                    <QuickActionBtn disabled={isTyping} onClick={() => handleSendMessage('qa', '如何分辨 make 和 do 的用法？')} label="分辨 make 和 do 的用法" />
+                    <QuickActionBtn disabled={isTyping} onClick={() => handleSendMessage('qa', '幫我解釋「Take it easy」是什麼意思？')} label="解釋 Take it easy" />
+                    <QuickActionBtn disabled={isTyping} onClick={() => handleSendMessage('qa', '如何寫一封正式的英文請假郵件？')} label="寫英文請假郵件" />
                   </>
                 ) : (
-                  <QuickActionBtn onClick={() => handleSendMessage('grammar', '我想學文法')} label="查看文法主題清單" />
+                  <QuickActionBtn disabled={isTyping} onClick={() => handleSendMessage('grammar', '我想學文法')} label="查看文法主題清單" />
                 )}
               </div>
             </div>
@@ -371,7 +369,6 @@ export default function App() {
               </div>
             </div>
           ))}
-          {/* ✨ AI 思考中動畫 */}
           {isTyping && (
             <div className="flex w-full justify-start">
               <div className="bg-stone-50 border border-stone-100 rounded-2xl px-4 py-4 shadow-sm flex gap-1.5 items-center">
@@ -385,8 +382,8 @@ export default function App() {
         </div>
         <div className="p-4 border-t border-stone-100 fixed bottom-16 w-full max-w-md bg-white z-20">
           <div className="relative flex items-center">
-            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder={isQA ? "輸入您的英文問題..." : "輸入主題，如：關係代名詞"} className="w-full bg-stone-50 border border-stone-200 rounded-full py-3.5 pl-6 pr-14 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all shadow-inner" />
-            <button onClick={() => handleSendMessage(type)} className="absolute right-2 p-2 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-colors shadow-md"><Send size={18} /></button>
+            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(type)} placeholder={isQA ? "輸入您的英文問題..." : "輸入主題，如：關係代名詞"} disabled={isTyping} className="w-full bg-stone-50 border border-stone-200 rounded-full py-3.5 pl-6 pr-14 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all shadow-inner disabled:opacity-50" />
+            <button onClick={() => handleSendMessage(type)} disabled={isTyping} className="absolute right-2 p-2 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-colors shadow-md disabled:opacity-50"><Send size={18} /></button>
           </div>
         </div>
       </div>
