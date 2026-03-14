@@ -15,8 +15,7 @@ import {
   Loader2, 
   ChevronRight,
   CheckCircle2,
-  HelpCircle,
-  Sparkles
+  HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { analyzeImages, chatWithAI, generateQuiz, WordAnalysis, QuizQuestion } from './services/gemini';
@@ -58,7 +57,7 @@ function QuickActionBtn({ onClick, label }: { onClick: () => void, label: string
       className="w-full py-3 px-4 bg-stone-50 text-stone-600 text-sm font-medium rounded-xl border border-stone-100 hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left flex items-center justify-between group mb-3"
     >
       <div className="flex items-center gap-2">
-        <Sparkles size={16} className="text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <span className="text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity text-base">✨</span>
         {label}
       </div>
       <ChevronRight size={16} className="text-stone-300 group-hover:text-emerald-400" />
@@ -88,7 +87,6 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🔄 讀取資料庫
   useEffect(() => {
     const loadSavedWords = async () => {
       try {
@@ -124,12 +122,17 @@ export default function App() {
       const messages = type === 'qa' ? qaMessages : grammarMessages;
       const chatHistory = messages.map(m => ({ role: m.role, text: m.text }));
       const response = await chatWithAI(textToSend, chatHistory); 
+      
       const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response || '連線有點問題，請再試一次。', timestamp: Date.now() };
-
       if (type === 'qa') setQaMessages(prev => [...prev, aiMsg]);
       else setGrammarMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
+
+    } catch (error: any) {
+      // ✨ 關鍵防護：如果 gemini.ts 報錯，會直接顯示在畫面上，不再白屏死機！
       console.error(error);
+      const errorMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: `⚠️ 老師發生錯誤：${error.message} \n\n請檢查 gemini.ts 的設定！`, timestamp: Date.now() };
+      if (type === 'qa') setQaMessages(prev => [...prev, errorMsg]);
+      else setGrammarMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsTyping(false);
     }
@@ -161,7 +164,6 @@ export default function App() {
     }
   };
 
-  // ✨ 確保完整測驗邏輯
   const handleStartQuiz = async () => {
     setIsGeneratingQuiz(true);
     setActiveTab('quiz');
@@ -171,19 +173,18 @@ export default function App() {
     setShowExplanation(false);
     setQuizScore(null);
     try {
+      // ✨ 單純傳遞單字給 gemini.ts，由 gemini.ts 決定要出 10 題選擇題
       const wordList = history.length > 0 ? history.map(w => w.word).join(', ') : "基礎常用單字";
-      const quizPrompt = `請針對以下範圍出題：${wordList}。
-      規則：
-      1. 必須出滿 10 題。
-      2. 全部必須是「四選一選擇題」。
-      3. 請用繁體中文提供詳細解析。`;
-
-      const quiz = await generateQuiz(quizPrompt);
+      const quiz = await generateQuiz(wordList);
+      
       if (quiz && Array.isArray(quiz) && quiz.length > 0) {
-        setCurrentQuiz(quiz.slice(0, 10)); // 強制截取前 10 題
+        setCurrentQuiz(quiz); 
+      } else {
+        alert("測驗產生失敗，請檢查 gemini.ts 回傳的 JSON 格式是否有誤。");
       }
     } catch (error) {
       console.error("產生測驗失敗：", error);
+      alert("網路連線或出題過程發生錯誤！");
     } finally {
       setIsGeneratingQuiz(false);
     }
@@ -195,12 +196,11 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // ✨ 完整還原測驗 UI
   const renderQuizTab = () => {
     if (isGeneratingQuiz) return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-4">
         <Loader2 className="animate-spin text-emerald-500" size={48} />
-        <p className="font-bold text-stone-600 text-lg">正在準備 10 題選擇題測驗...</p>
+        <p className="font-bold text-stone-600 text-lg">正在為您準備選擇題測驗...</p>
       </div>
     );
 
@@ -213,7 +213,7 @@ export default function App() {
           <span className="text-emerald-600 font-bold text-5xl">{quizScore} <span className="text-2xl text-emerald-400">/ {currentQuiz.length}</span></span>
         </div>
         <div className="w-full space-y-3 pt-4">
-          <button onClick={handleStartQuiz} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg">再挑戰 10 題</button>
+          <button onClick={handleStartQuiz} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg">再挑戰一次</button>
           <button onClick={() => setActiveTab('history')} className="w-full py-4 bg-stone-100 text-stone-600 rounded-2xl font-bold">查看單字紀錄</button>
         </div>
       </div>
@@ -226,7 +226,7 @@ export default function App() {
             <BookOpen size={48} />
           </div>
           <h3 className="text-2xl font-bold text-stone-800">準備好挑戰了嗎？</h3>
-          <p className="text-stone-500">系統將根據你的學習足跡，產生 10 題選擇題。</p>
+          <p className="text-stone-500">系統將根據學習足跡為您出題。</p>
         </div>
         <button onClick={handleStartQuiz} className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-bold text-lg shadow-xl shadow-emerald-100 transition-all active:scale-95">
           開始複習測驗
@@ -291,8 +291,7 @@ export default function App() {
                   setQuizIndex(prev => prev + 1);
                   setShowExplanation(false);
                 } else {
-                  const score = currentQuiz.reduce((acc, curr) => acc + (userAnswers[curr.id] === curr.correct_answer ? 1 : 0), 0);
-                  setQuizScore(score);
+                  setQuizScore(currentQuiz.reduce((acc, curr) => acc + (userAnswers[curr.id] === curr.correct_answer ? 1 : 0), 0));
                 }
               }} 
               className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg"
@@ -332,7 +331,6 @@ export default function App() {
     </div>
   );
 
-  // ✨ 正確區分問答與文法介面
   const renderChatTab = (type: 'qa' | 'grammar') => {
     const messages = type === 'qa' ? qaMessages : grammarMessages;
     const isQA = type === 'qa';
@@ -373,7 +371,7 @@ export default function App() {
               </div>
             </div>
           ))}
-          {/* AI 思考中動畫 */}
+          {/* ✨ AI 思考中動畫 */}
           {isTyping && (
             <div className="flex w-full justify-start">
               <div className="bg-stone-50 border border-stone-100 rounded-2xl px-4 py-4 shadow-sm flex gap-1.5 items-center">
